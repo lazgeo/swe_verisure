@@ -38,8 +38,8 @@ class DeviceManager:
         # Get additional system-specific information
         try:
             # Get hostname for additional uniqueness
-            hostname = os.uname().nodename if hasattr(os, 'uname') else platform.node()
-        except:
+            hostname = os.uname().nodename if hasattr(os, "uname") else platform.node()
+        except (AttributeError, OSError):
             hostname = platform.node()
         
         # Create a more complex seed with multiple factors

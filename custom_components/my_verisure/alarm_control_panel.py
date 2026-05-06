@@ -23,9 +23,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up My Verisure alarm control panel based on a config entry."""
-    coordinator: MyVerisureDataUpdateCoordinator = hass.data[DOMAIN][
-        config_entry.entry_id
-    ]
+    coordinator: MyVerisureDataUpdateCoordinator = config_entry.runtime_data
 
     # Create alarm control panel entity
     async_add_entities([MyVerisureAlarmControlPanel(coordinator, config_entry)])
@@ -42,7 +40,7 @@ class MyVerisureAlarmControlPanel(AlarmControlPanelEntity):
         self.config_entry = config_entry
         # Use a simple name and unique_id
         self._attr_name = ENTITY_NAMES["alarm_control_panel"]
-        self._attr_unique_id = "my_verisure"
+        self._attr_unique_id = f"{config_entry.entry_id}_alarm_panel"
         self._attr_code_format = None  # No code required
         self._attr_code_arm_required = False  # No code required for arming
         self._attr_code_disarm_required = False  # No code required for disarming
@@ -117,7 +115,7 @@ class MyVerisureAlarmControlPanel(AlarmControlPanelEntity):
         elif internal_night:
             primary_state = AlarmControlPanelState.ARMED_NIGHT
         elif internal_day:
-            primary_state = AlarmControlPanelState.ARMED_NIGHT
+            primary_state = AlarmControlPanelState.ARMED_HOME
         elif external_status:
             # Map external to home
             primary_state = AlarmControlPanelState.ARMED_HOME

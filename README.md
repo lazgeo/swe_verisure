@@ -124,14 +124,34 @@ New to the project? Start here: **[QUICKSTART.md](QUICKSTART.md)** (5-minute set
 
 ### Local Home Assistant Setup
 
-The project includes a complete DevContainer configuration for testing the integration in a local Home Assistant instance with **Cursor** or VS Code:
+#### Option A: Docker Standalone (Recommended for OrbStack)
+
+If you're using OrbStack, use this simple Docker setup:
 
 ```bash
-# Using the dev helper script (detects Cursor or VS Code automatically)
+# Start Home Assistant
+./dev docker-start
+
+# Access at http://localhost:8123
+
+# View logs
+./dev docker-logs
+
+# Stop
+./dev docker-stop
+```
+
+**See complete guide:** [OrbStack Setup](ORBSTACK_SETUP.md)
+
+#### Option B: DevContainer (For Docker Desktop + Cursor/VS Code)
+
+For Docker Desktop users who want integrated debugging:
+
+```bash
+# Using the dev helper script
 ./dev devcontainer  # Opens in Cursor/VS Code DevContainer
 ./dev start         # Start Home Assistant
 ./dev logs          # View logs
-./dev test          # Run tests
 
 # Or manually
 cursor .            # Open in Cursor (or: code .)
@@ -142,7 +162,9 @@ container start     # Start Home Assistant
 
 **Cursor users:** Works identically to VS Code! All DevContainer features, debugging, and extensions are fully compatible.
 
-**See the complete guide:** [Local Development Setup](docs/developer-guide/local-development.md)
+**See complete guides:**
+- [Local Development Setup](docs/developer-guide/local-development.md)
+- [OrbStack Setup](ORBSTACK_SETUP.md) ← Use this if you have OrbStack
 
 ### Quick Setup (CLI/Core Development)
 

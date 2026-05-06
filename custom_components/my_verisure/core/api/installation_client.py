@@ -101,7 +101,6 @@ query xSDeviceList($numinst: String!, $panel: String!) {
       name
       type
       subtype
-      remoteUse
       idService
       isActive
       serialNumber

@@ -39,8 +39,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await coordinator.async_config_entry_first_refresh()
 
+    entry.runtime_data = coordinator
+
     hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = coordinator
 
     # Set up the device
     await async_setup_device(hass, entry)
@@ -68,7 +69,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Handle options update."""
     # Propagate configuration change
-    coordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator = entry.runtime_data
     
     # Update coordinator with new scan interval (options override data)
     scan_interval_minutes = entry.options.get(CONF_SCAN_INTERVAL, entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
@@ -94,11 +95,16 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not unload_ok:
         return False
 
-    del hass.data[DOMAIN][entry.entry_id]
+    # Note: do not call coordinator.async_cleanup() here — clear_dependencies()
+    # is global and would break other loaded my_verisure config entries.
 
-    # Unload services if no more entries
-    if not hass.data[DOMAIN]:
+    remaining_entries = [
+        e
+        for e in hass.config_entries.async_entries(DOMAIN)
+        if e.entry_id != entry.entry_id
+    ]
+    if not remaining_entries:
         await async_unload_services(hass)
-        del hass.data[DOMAIN]
+        hass.data.pop(DOMAIN, None)
 
     return True 

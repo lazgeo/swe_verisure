@@ -23,9 +23,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up My Verisure binary sensors based on a config entry."""
-    coordinator: MyVerisureDataUpdateCoordinator = hass.data[DOMAIN][
-        config_entry.entry_id
-    ]
+    coordinator: MyVerisureDataUpdateCoordinator = config_entry.runtime_data
 
     entities = []
 

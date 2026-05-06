@@ -7,14 +7,15 @@ from datetime import datetime
 from typing import Optional
 
 from homeassistant.components.camera import Camera
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .core.file_manager import get_file_manager
-from .core.const import DOMAIN
 from .coordinator import MyVerisureDataUpdateCoordinator
 from .core.dependency_injection.providers import setup_dependencies, clear_dependencies
+from .device import get_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -22,20 +23,21 @@ _LOGGER = logging.getLogger(__name__)
 class VerisureCamera(CoordinatorEntity, Camera):
     """Camera entity for Verisure cameras."""
 
-    def __init__(self, coordinator, device):
+    def __init__(
+        self,
+        coordinator: MyVerisureDataUpdateCoordinator,
+        device: dict,
+        config_entry: ConfigEntry,
+    ) -> None:
         """Initialize the camera entity."""
         super().__init__(coordinator)
         self._device = device
         self._attr_name = f"Verisure {device['name']}"
-        self._attr_unique_id = f"verisure_camera_{device['code']}"
-        self._attr_device_info = {
-            "identifiers": {("verisure", device['code'])},
-            "name": device['name'],
-            "manufacturer": "Verisure",
-            "model": f"{device['type']} Camera",
-        }
+        self._attr_unique_id = f"{config_entry.entry_id}_camera_{device['code']}"
+        self._attr_device_info = get_device_info(config_entry)
         self._latest_image_path = None
         self._latest_image_timestamp = None
+        self._sync_image_cache: bytes | None = None
         
         # Required attributes for Camera entity
         self._webrtc_provider = None
@@ -49,8 +51,8 @@ class VerisureCamera(CoordinatorEntity, Camera):
 
     @property
     def camera_image(self) -> Optional[bytes]:
-        """Return the latest camera image."""
-        return self._get_latest_image()
+        """Return the latest cached image (sync API); prefer async_camera_image."""
+        return self._sync_image_cache
 
     def _get_latest_image(self) -> Optional[bytes]:
         """Get the most recent image for this camera."""
@@ -160,7 +162,9 @@ class VerisureCamera(CoordinatorEntity, Camera):
 
         Width and height are ignored because this camera only serves static images.
         """
-        return self._get_latest_image()
+        image = await self.hass.async_add_executor_job(self._get_latest_image)
+        self._sync_image_cache = image
+        return image
 
     @property
     def supported_features(self) -> int:
@@ -217,9 +221,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Verisure camera entities."""
-    coordinator: MyVerisureDataUpdateCoordinator = hass.data[DOMAIN][
-        config_entry.entry_id
-    ]
+    coordinator: MyVerisureDataUpdateCoordinator = config_entry.runtime_data
     
     # Wait for coordinator data to be available
     if not coordinator.data:
@@ -238,7 +240,7 @@ async def async_setup_entry(
     ]
     
     for device in camera_devices:
-        camera = VerisureCamera(coordinator, device)
+        camera = VerisureCamera(coordinator, device, config_entry)
         cameras.append(camera)
         _LOGGER.info("Created camera entity for %s (%s)", device['name'], f"{device['type']}{int(device['code']):02d}")
 

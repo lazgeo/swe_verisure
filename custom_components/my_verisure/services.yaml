@@ -63,6 +63,12 @@ disarm:
       required: true
       selector:
         text:
+    code:
+      name: "Disarm code"
+      description: "Optional PIN if required by your panel (reserved for future use)"
+      required: false
+      selector:
+        text:
 
 # Get alarm status
 get_status:
@@ -80,4 +86,14 @@ get_status:
       selector:
         text:
 
- 
+# Refresh camera images
+refresh_camera_images:
+  name: "Refresh Camera Images"
+  description: "Download fresh thumbnails from Verisure cameras"
+  fields:
+    installation_id:
+      name: "Installation ID"
+      description: "The installation ID to refresh cameras for"
+      required: true
+      selector:
+        text:

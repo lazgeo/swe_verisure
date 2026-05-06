@@ -3,12 +3,14 @@
 import logging
 
 from homeassistant.components.button import ButtonEntity
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .core.const import DOMAIN
 from .coordinator import MyVerisureDataUpdateCoordinator
+from .device import get_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -16,18 +18,19 @@ _LOGGER = logging.getLogger(__name__)
 class RefreshCameraImagesButton(CoordinatorEntity, ButtonEntity):
     """Button entity for refreshing camera images."""
 
-    def __init__(self, coordinator, installation_id: str):
+    def __init__(
+        self,
+        coordinator: MyVerisureDataUpdateCoordinator,
+        installation_id: str,
+        config_entry: ConfigEntry,
+    ) -> None:
         """Initialize the refresh camera images button."""
         super().__init__(coordinator)
         self._coordinator = coordinator
         self._installation_id = installation_id
         self._attr_name = "Refresh Camera Images"
-        self._attr_unique_id = f"verisure_refresh_camera_images_{installation_id}"
-        self._attr_device_info = {
-            "identifiers": {("verisure", "camera_refresh")},
-            "name": "Verisure Camera Refresh",
-            "manufacturer": "Verisure",
-        }
+        self._attr_unique_id = f"{config_entry.entry_id}_refresh_camera_images"
+        self._attr_device_info = get_device_info(config_entry)
         # Track if button is currently executing
         self._is_executing = False
 
@@ -94,9 +97,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Verisure button entities."""
-    coordinator: MyVerisureDataUpdateCoordinator = hass.data[DOMAIN][
-        config_entry.entry_id
-    ]
+    coordinator: MyVerisureDataUpdateCoordinator = config_entry.runtime_data
     
     # Wait for coordinator data to be available
     if not coordinator.data:
@@ -109,7 +110,9 @@ async def async_setup_entry(
     installation_id = coordinator.data.get("installation_id")
     if installation_id:
         # Create refresh camera images button
-        refresh_button = RefreshCameraImagesButton(coordinator, installation_id)
+        refresh_button = RefreshCameraImagesButton(
+            coordinator, installation_id, config_entry
+        )
         buttons.append(refresh_button)
         _LOGGER.info("Created refresh camera images button for installation %s", installation_id)
 

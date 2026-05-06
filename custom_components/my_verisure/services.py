@@ -24,6 +24,7 @@ SERVICE_ARM_NIGHT_SCHEMA = vol.Schema({
 
 SERVICE_DISARM_SCHEMA = vol.Schema({
     vol.Required("installation_id"): cv.string,
+    vol.Optional("code"): cv.string,
 })
 
 SERVICE_GET_STATUS_SCHEMA = vol.Schema({
@@ -43,6 +44,14 @@ def _update_alarm_panel_state(coordinator: MyVerisureDataUpdateCoordinator) -> N
     except Exception as e:
         LOGGER.error("Error updating alarm control panel state: %s", e)
 
+def _iter_coordinators(hass: HomeAssistant):
+    """Yield loaded My Verisure coordinators from config entries."""
+    for domain_entry in hass.config_entries.async_entries(DOMAIN):
+        coordinator = getattr(domain_entry, "runtime_data", None)
+        if isinstance(coordinator, MyVerisureDataUpdateCoordinator):
+            yield coordinator
+
+
 def _update_button_state(coordinator: MyVerisureDataUpdateCoordinator) -> None:
     """Update the button state via coordinator."""
     try:
@@ -60,11 +69,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         LOGGER.warning("Service arm_away called for installation %s", installation_id)
         
         # Find the coordinator for this installation
-        for entry_id, obj in hass.data[DOMAIN].items():
-            if not isinstance(obj, MyVerisureDataUpdateCoordinator):
-                continue
-            coordinator: MyVerisureDataUpdateCoordinator = obj
-
+        for coordinator in _iter_coordinators(hass):
             if coordinator.config_entry.data.get("installation_id") == installation_id:
                 LOGGER.warning("Found coordinator for installation %s, calling async_arm_away", installation_id)
                 try:
@@ -91,11 +96,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         LOGGER.warning("Service arm_home called for installation %s", installation_id)
         
         # Find the coordinator for this installation
-        for entry_id, obj in hass.data[DOMAIN].items():
-            if not isinstance(obj, MyVerisureDataUpdateCoordinator):
-                continue
-            coordinator: MyVerisureDataUpdateCoordinator = obj
-
+        for coordinator in _iter_coordinators(hass):
             if coordinator.config_entry.data.get("installation_id") == installation_id:
                 LOGGER.warning("Found coordinator for installation %s, calling async_arm_home", installation_id)
                 try:
@@ -122,11 +123,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         LOGGER.warning("Service arm_night called for installation %s", installation_id)
         
         # Find the coordinator for this installation
-        for entry_id, obj in hass.data[DOMAIN].items():
-            if not isinstance(obj, MyVerisureDataUpdateCoordinator):
-                continue
-            coordinator: MyVerisureDataUpdateCoordinator = obj
-            
+        for coordinator in _iter_coordinators(hass):
             if coordinator.config_entry.data.get("installation_id") == installation_id:
                 LOGGER.warning("Found coordinator for installation %s, calling async_arm_night", installation_id)
                 try:
@@ -150,15 +147,10 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     async def async_disarm_service(call: ServiceCall) -> None:
         """Service to disarm the alarm."""
         installation_id = call.data["installation_id"]
-        code = call.data.get("code")
         LOGGER.warning("Service disarm called for installation %s", installation_id)
-        
+
         # Find the coordinator for this installation
-        for entry_id, obj in hass.data[DOMAIN].items():
-            if not isinstance(obj, MyVerisureDataUpdateCoordinator):
-                continue
-            coordinator: MyVerisureDataUpdateCoordinator = obj
-            
+        for coordinator in _iter_coordinators(hass):
             if coordinator.config_entry.data.get("installation_id") == installation_id:
                 LOGGER.warning("Found coordinator for installation %s, calling async_disarm", installation_id)
                 try:
@@ -185,10 +177,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         LOGGER.warning("Service get_status called for installation %s", installation_id)
         
         # Find the coordinator for this installation
-        for entry_id, obj in hass.data[DOMAIN].items():
-            if not isinstance(obj, MyVerisureDataUpdateCoordinator):
-                continue
-            coordinator: MyVerisureDataUpdateCoordinator = obj
+        for coordinator in _iter_coordinators(hass):
             if coordinator.config_entry.data.get("installation_id") == installation_id:
                 LOGGER.warning("Found coordinator for installation %s, calling async_request_refresh", installation_id)
                 try:
@@ -206,11 +195,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         LOGGER.warning("Service refresh_camera_images called for installation %s", installation_id)
         
         # Find the coordinator for this installation
-        for entry_id, obj in hass.data[DOMAIN].items():
-            if not isinstance(obj, MyVerisureDataUpdateCoordinator):
-                continue
-            coordinator: MyVerisureDataUpdateCoordinator = obj
-            
+        for coordinator in _iter_coordinators(hass):
             if coordinator.config_entry.data.get("installation_id") == installation_id:
                 LOGGER.warning("Found coordinator for installation %s, calling async_refresh_camera_images", installation_id)
                 try:
@@ -223,7 +208,6 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 break
         else:
             LOGGER.error("Installation %s not found", installation_id)
-            _update_button_state(coordinator)
 
 
     # Register services

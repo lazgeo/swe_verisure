@@ -109,15 +109,15 @@ class MyVerisureDataUpdateCoordinator(DataUpdateCoordinator):
     async def async_login(self) -> bool:
         """Login to My Verisure."""
         try:
-            # Check if we have a valid session
+            # Check if we have a valid session that is still valid locally
             if self.session_manager.is_authenticated:
-                LOGGER.warning("Using existing valid session")
-                
-                # First check if token has expired locally (more efficient)
-                if not self.session_manager.is_session_valid():
-                    LOGGER.warning("Session token has expired locally, will re-authenticate")
+                if self.session_manager.is_session_valid():
+                    LOGGER.debug("Using existing valid session")
                     return True
-            
+                LOGGER.warning(
+                    "Session marked authenticated but token invalid locally, refreshing..."
+                )
+
             # If we don't have a valid session, try to refresh it automatically
             LOGGER.warning("No valid session available, attempting automatic refresh...")
             if await self.async_refresh_session():
@@ -183,7 +183,7 @@ class MyVerisureDataUpdateCoordinator(DataUpdateCoordinator):
                 LOGGER.warning("New login successful and session saved")
                 return True
             else:
-                LOGGER.error("Login failed: %s", auth_result.error_message)
+                LOGGER.error("Login failed: %s", auth_result.message)
                 return False
                 
         except MyVerisureServiceBlockedError as ex:
@@ -229,7 +229,11 @@ class MyVerisureDataUpdateCoordinator(DataUpdateCoordinator):
             try:
                 self.async_set_updated_data(result)
                 try:
-                    save_success = self.file_manager.save_json(COORDINATOR_DATA_FILE, result)
+                    save_success = await self.hass.async_add_executor_job(
+                        self.file_manager.save_json,
+                        COORDINATOR_DATA_FILE,
+                        result,
+                    )
                     if not save_success:
                         LOGGER.error("Failed to save coordinator data to %s", COORDINATOR_DATA_FILE)
                 except Exception as save_err:
@@ -559,20 +563,6 @@ class MyVerisureDataUpdateCoordinator(DataUpdateCoordinator):
         except Exception as e:
             LOGGER.error("Error loading session: %s", e)
             return False
-
-    async def async_config_entry_first_refresh(self) -> None:
-        """Perform the first refresh of the coordinator."""
-        try:
-            await self.async_request_refresh()
-        except Exception as e:
-            LOGGER.error("Error during first refresh: %s", e)
-
-    async def async_request_refresh(self) -> None:
-        """Request a refresh of the coordinator data."""
-        try:
-            await self._async_update_data()
-        except Exception as e:
-            LOGGER.error("Error during refresh: %s", e)
 
     def register_alarm_control_panel(self, alarm_panel) -> None:
         """Register the alarm control panel for state updates."""

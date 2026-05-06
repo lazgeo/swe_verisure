@@ -13,7 +13,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .core.const import DOMAIN, LOGGER, ENTITY_NAMES
+from .core.const import LOGGER, ENTITY_NAMES
 from .coordinator import MyVerisureDataUpdateCoordinator
 from .device import get_device_info
 
@@ -24,9 +24,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up My Verisure sensors based on a config entry."""
-    coordinator: MyVerisureDataUpdateCoordinator = hass.data[DOMAIN][
-        config_entry.entry_id
-    ]
+    coordinator: MyVerisureDataUpdateCoordinator = config_entry.runtime_data
 
     entities = []
 
@@ -119,10 +117,10 @@ class MyVerisureAlarmStatusSensor(SensorEntity):
             return "Internal Day and Perimeter Active"
         elif internal_day:
             return "Internal Day Active"
-        elif internal_night:
-            return "Internal Night Active"
         elif internal_night and external_status:
             return "Internal Night and Perimeter Active"
+        elif internal_night:
+            return "Internal Night Active"
         elif external_status:
             return "Perimeter Active"
         else:
@@ -386,9 +384,13 @@ class MyVerisurePanelStateSensor(SensorEntity):
         if not alarm_status:
             return "disarmed"
 
-        # Analizar el estado de la alarma usando la misma lógica que el panel
-        internal = alarm_status.get("internal", {})
-        external = alarm_status.get("external", {})
+        # Misma estructura que alarm_control_panel: datos bajo "data"
+        raw_data = alarm_status.get("data", {})
+        if not raw_data:
+            return "disarmed"
+
+        internal = raw_data.get("internal", {})
+        external = raw_data.get("external", {})
         
         # Determinar el estado principal basado en prioridad
         internal_day = internal.get("day", {}).get("status", False)
@@ -429,7 +431,6 @@ class MyVerisurePanelStateSensor(SensorEntity):
             "internal_total_status": internal.get("total", {}).get("status", False),
             "external_status": external.get("status", False),
             "installation_id": self.config_entry.data.get("installation_id", "Unknown"),
-            "entity_id": f"alarm_control_panel.my_verisure_alarm_{self.config_entry.data.get('installation_id', 'unknown')}",
         }
 
     @property
