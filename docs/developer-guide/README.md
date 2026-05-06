@@ -6,6 +6,7 @@ For contributors working on `custom_components/my_verisure` and the bundled `cor
 
 | Doc | Topic |
 |-----|-------|
+| [local-development.md](local-development.md) | **Local Home Assistant setup with DevContainer (start here!)** |
 | [setup.md](setup.md) | Virtualenv, dependencies, repo layout |
 | [testing.md](testing.md) | Pytest, scripts, coverage |
 | [code-organization.md](code-organization.md) | Packages and responsibilities |

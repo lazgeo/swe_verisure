@@ -118,9 +118,35 @@ Additional services: `my_verisure.get_status`, `my_verisure.refresh_camera_image
 
 ## 🛠️ Development
 
-### Quick Setup
+### Quick Start
 
-To set up the development environment:
+New to the project? Start here: **[QUICKSTART.md](QUICKSTART.md)** (5-minute setup)
+
+### Local Home Assistant Setup
+
+The project includes a complete DevContainer configuration for testing the integration in a local Home Assistant instance with **Cursor** or VS Code:
+
+```bash
+# Using the dev helper script (detects Cursor or VS Code automatically)
+./dev devcontainer  # Opens in Cursor/VS Code DevContainer
+./dev start         # Start Home Assistant
+./dev logs          # View logs
+./dev test          # Run tests
+
+# Or manually
+cursor .            # Open in Cursor (or: code .)
+# Reopen in Container (Cursor will prompt you)
+container start     # Start Home Assistant
+# Access at http://localhost:7123
+```
+
+**Cursor users:** Works identically to VS Code! All DevContainer features, debugging, and extensions are fully compatible.
+
+**See the complete guide:** [Local Development Setup](docs/developer-guide/local-development.md)
+
+### Quick Setup (CLI/Core Development)
+
+To set up the development environment for CLI and core library development:
 
 ```bash
 # Clone the repository
@@ -151,6 +177,20 @@ The project includes a comprehensive testing system:
 - **HTML Reports**: Available in `htmlcov/` directory
 
 #### 🛠️ **Available Commands**
+
+**Using the `dev` helper script:**
+
+```bash
+./dev test          # Run all tests
+./dev coverage      # Generate coverage report
+./dev lint          # Run pylint
+./dev format        # Format code with black
+./dev type-check    # Run mypy
+./dev check         # Run all quality checks
+./dev help          # See all commands
+```
+
+**Or using Python directly:**
 
 ```bash
 # Run all tests with coverage

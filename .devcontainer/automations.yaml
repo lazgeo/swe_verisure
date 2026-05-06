@@ -1,0 +1,14 @@
+# Example automations for testing My Verisure integration
+# You can add test automations here
+
+# Example: Log when alarm state changes
+- id: test_alarm_state_change
+  alias: "Test: Log Alarm State Changes"
+  trigger:
+    - platform: state
+      entity_id: alarm_control_panel.my_verisure
+  action:
+    - service: system_log.write
+      data:
+        message: "Alarm state changed from {{ trigger.from_state.state }} to {{ trigger.to_state.state }}"
+        level: info
