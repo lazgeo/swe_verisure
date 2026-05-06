@@ -1,0 +1,197 @@
+---
+description: Conventions and best practices for Home Assistant custom integrations
+globs: "custom_components/**/*.py"
+alwaysApply: false
+---
+
+# Home Assistant Integration Standards
+
+## Core Rules (Non-Negotiable)
+
+### 1. Timestamps
+
+```python
+# ✅ ALWAYS
+from homeassistant.util import dt as dt_util
+now = dt_util.now()
+
+# ❌ NEVER
+from datetime import datetime
+now = datetime.now()
+```
+
+### 2. Async HTTP
+
+```python
+# ✅ ALWAYS — use aiohttp
+import aiohttp
+async def fetch():
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            return await response.json()
+
+# ❌ NEVER — use requests
+import requests
+def fetch():
+    return requests.get(url).json()
+```
+
+### 3. JSON-Serializable Attributes
+
+```python
+# ✅ GOOD
+@property
+def extra_state_attributes(self) -> dict[str, Any]:
+    return {
+        "status": "armed",
+        "timestamp": self.last_update.isoformat(),
+        "count": 5
+    }
+
+# ❌ BAD — non-serializable objects
+@property
+def extra_state_attributes(self) -> dict[str, Any]:
+    return {
+        "timestamp": datetime.now(),  # ❌ datetime object
+        "data": self._raw_object      # ❌ custom object
+    }
+```
+
+### 4. Runtime Data Storage (HA 2024.4+)
+
+```python
+# ✅ GOOD — use entry.runtime_data
+async def async_setup_entry(hass, entry):
+    coordinator = MyCoordinator(hass, entry)
+    await coordinator.async_config_entry_first_refresh()
+    entry.runtime_data = coordinator
+
+# ❌ BAD — avoid hass.data for new integrations
+async def async_setup_entry(hass, entry):
+    hass.data[DOMAIN][entry.entry_id] = coordinator
+```
+
+## File Layout
+
+```
+custom_components/my_verisure/
+├── __init__.py          # Setup & coordinator
+├── manifest.json        # Integration metadata
+├── config_flow.py       # Configuration UI
+├── const.py             # Constants
+├── alarm_control_panel.py  # Platform
+├── sensor.py            # Platform
+├── services.yaml        # Service definitions
+└── strings.json         # UI strings
+```
+
+## Config Flow
+
+```python
+class MyVerisureConfigFlow(ConfigFlow, domain=DOMAIN):
+    """Config flow for My Verisure."""
+
+    VERSION = 1
+
+    async def async_step_user(self, user_input=None):
+        """Handle user step."""
+        errors = {}
+
+        if user_input is not None:
+            try:
+                # Validate credentials
+                await validate_auth(user_input)
+                return self.async_create_entry(
+                    title=user_input[CONF_USERNAME],
+                    data=user_input
+                )
+            except InvalidAuth:
+                errors["base"] = "invalid_auth"
+            except Exception:
+                errors["base"] = "unknown"
+
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema({
+                vol.Required(CONF_USERNAME): str,
+                vol.Required(CONF_PASSWORD): str,
+            }),
+            errors=errors,
+        )
+```
+
+## Coordinator Pattern
+
+```python
+class MyVerisureDataUpdateCoordinator(DataUpdateCoordinator):
+    """Coordinator to refresh integration data."""
+
+    def __init__(self, hass: HomeAssistant, client: ApiClient):
+        """Initialize coordinator."""
+        super().__init__(
+            hass,
+            logger,
+            name="My Verisure",
+            update_interval=timedelta(seconds=30),
+        )
+        self.client = client
+
+    async def _async_update_data(self):
+        """Fetch data from API."""
+        try:
+            async with asyncio.timeout(10):
+                return await self.client.get_installations()
+        except ApiError as err:
+            raise UpdateFailed(f"Error updating data: {err}")
+```
+
+## Entity Base
+
+```python
+class MyVerisureEntity(CoordinatorEntity):
+    """Base entity for My Verisure."""
+
+    def __init__(self, coordinator, installation_id):
+        """Initialize entity."""
+        super().__init__(coordinator)
+        self._installation_id = installation_id
+        self._attr_has_entity_name = True
+
+    @property
+    def device_info(self):
+        """Return device info."""
+        return {
+            "identifiers": {(DOMAIN, self._installation_id)},
+            "name": f"Verisure {self._installation_id}",
+            "manufacturer": "Verisure",
+            "model": "Alarm System",
+        }
+```
+
+## Testing
+
+```python
+async def test_config_flow_success(hass):
+    """Test successful config flow."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    assert result["type"] == "form"
+
+    with patch("custom_components.my_verisure.config_flow.validate_auth"):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_USERNAME: "test", CONF_PASSWORD: "test"},
+        )
+
+    assert result["type"] == "create_entry"
+    assert result["title"] == "test"
+```
+
+## Common Mistakes to Avoid
+
+1. ❌ Do not use `datetime.now()` — use `dt_util.now()`
+2. ❌ Do not use `requests` — use `aiohttp`
+3. ❌ Do not put non-serializable objects in attributes
+4. ❌ Do not rely on `hass.data` for new code — prefer `entry.runtime_data`
+5. ❌ Do not block the event loop with synchronous I/O

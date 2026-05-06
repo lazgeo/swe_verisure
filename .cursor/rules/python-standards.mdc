@@ -1,0 +1,103 @@
+---
+description: Modern Python code standards for this project (2026)
+globs: "**/*.py"
+alwaysApply: false
+---
+
+# Python Code Standards
+
+## Modern Tooling (2026)
+
+- Use **ruff** for linting and formatting (replaces black, flake8, isort)
+- Use **mypy** for strict type checking
+- Prefer configuration in `pyproject.toml`
+
+## Type Hints
+
+Use modern syntax:
+
+```python
+# ✅ GOOD (Python 3.10+)
+def process(items: list[str]) -> str | None:
+    pass
+
+# ❌ BAD (legacy syntax)
+from typing import List, Optional
+def process(items: List[str]) -> Optional[str]:
+    pass
+```
+
+## Naming Conventions
+
+- Functions and variables: `snake_case`
+- Classes: `PascalCase`
+- Constants: `SCREAMING_SNAKE_CASE`
+- Files: descriptive `snake_case` (no cryptic abbreviations)
+
+## Error Handling
+
+```python
+# ❌ BAD
+try:
+    result = api_call()
+except Exception:
+    pass
+
+# ✅ GOOD
+try:
+    result = api_call()
+except ApiError as e:
+    logger.error(f"API call failed: {e}")
+    raise
+```
+
+## Async / Await
+
+```python
+# ✅ GOOD
+import aiohttp
+
+async def fetch_data(url: str) -> dict:
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            return await response.json()
+
+# ❌ BAD — do not use requests in async code paths
+import requests
+def fetch_data(url: str) -> dict:
+    return requests.get(url).json()
+```
+
+## Testing
+
+- Use pytest with fixtures
+- Descriptive test names: `test_should_return_error_when_token_expired`
+- AAA pattern: Arrange, Act, Assert
+- Mock external dependencies with `pytest-mock`
+
+## Documentation
+
+Google-style docstrings:
+
+```python
+def calculate_total(items: list[int], tax: float) -> float:
+    """Calculate the total with tax applied.
+
+    Args:
+        items: List of item prices
+        tax: Tax rate as decimal (0.10 for 10%)
+
+    Returns:
+        Total price with tax applied
+
+    Raises:
+        ValueError: If tax rate is negative
+
+    Example:
+        >>> calculate_total([10, 20], 0.10)
+        33.0
+    """
+    if tax < 0:
+        raise ValueError("Tax rate cannot be negative")
+    return sum(items) * (1 + tax)
+```

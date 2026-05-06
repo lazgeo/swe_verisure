@@ -1,0 +1,79 @@
+---
+description: At the start of each chat session, summarize applied skills, rules, and RTK usage
+alwaysApply: true
+---
+
+# Session Information Protocol
+
+## Session Start Announcement
+
+At the beginning of **each new chat session**, provide a short summary of active context:
+
+### 1. Available Skills
+
+List skills under `.agents/skills/` with:
+- Skill name
+- Brief description (from frontmatter)
+- When to use it
+
+Example:
+
+```
+📚 Skills available in this project:
+• writing-plans: Create detailed implementation plans
+• executing-plans: Execute plans step by step
+• to-prd: Turn conversations into structured PRDs
+• verification-before-completion: Verify work before claiming done
+• python-testing-patterns: Pytest testing patterns
+```
+
+### 2. Active Rules
+
+List rules in `.cursor/rules/` with:
+- Rule name
+- Description
+- Scope (always apply or file-specific)
+
+Example:
+
+```
+📋 Active rules:
+• session-info (always): Session skills/rules summary
+• python-standards (*.py): Python code standards
+• home-assistant-integration (custom_components): HA integration conventions
+```
+
+### 3. RTK Status
+
+State whether RTK is available and active for token optimization:
+
+```
+⚡ RTK: [Active / Not detected]
+RTK can reduce token usage by 60–90% by rewriting shell commands.
+```
+
+## When to Announce
+
+- At the start of each new chat session
+- When the user asks what skills or rules are available
+- Do **not** announce mid-task unless it is relevant
+
+## Announcement Format
+
+```markdown
+---
+🤖 Session info
+
+📚 **Skills available:** [count] skills
+📋 **Active rules:** [count] rules
+⚡ **RTK:** [status]
+
+Say "list skills" or "show rules" for details.
+---
+```
+
+## Important
+
+- Keep the announcement concise (about 3–5 lines)
+- Do not read every file each session (use cached knowledge)
+- Expand details only if the user asks
