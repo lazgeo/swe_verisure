@@ -277,4 +277,5 @@ async def async_unload_services(hass: HomeAssistant) -> None:
     hass.services.async_remove(DOMAIN, "arm_night")
     hass.services.async_remove(DOMAIN, "disarm")
     hass.services.async_remove(DOMAIN, "get_status")
+    hass.services.async_remove(DOMAIN, "refresh_camera_images")
  

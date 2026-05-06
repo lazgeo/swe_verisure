@@ -1,0 +1,8 @@
+# Status panel — glance-style overview
+type: glance
+title: Verisure status
+entities:
+  - entity: sensor.my_verisure_active_alarms
+  - entity: sensor.my_verisure_panel_state
+  - entity: binary_sensor.my_verisure_alarm_external
+  - entity: binary_sensor.my_verisure_alarm_internal_total

@@ -1,0 +1,13 @@
+alias: Verisure refresh camera images weekly
+mode: single
+trigger:
+  - platform: time
+    at: "03:30:00"
+condition:
+  - condition: time
+    weekday:
+      - wed
+action:
+  - service: my_verisure.refresh_camera_images
+    data:
+      installation_id: INSTALLATION_ID

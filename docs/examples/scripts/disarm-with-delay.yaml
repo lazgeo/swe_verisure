@@ -1,0 +1,8 @@
+alias: Verisure delayed disarm
+sequence:
+  - delay:
+      seconds: 5
+  - service: my_verisure.disarm
+    data:
+      installation_id: INSTALLATION_ID
+mode: single

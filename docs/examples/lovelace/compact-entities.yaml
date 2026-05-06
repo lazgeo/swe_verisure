@@ -1,0 +1,9 @@
+type: entities
+title: Verisure compact
+show_header_toggle: false
+entities:
+  - entity: alarm_control_panel.my_verisure
+  - entity: sensor.my_verisure_panel_state
+  - type: divider
+  - entity: binary_sensor.my_verisure_alarm_internal_total
+  - entity: binary_sensor.my_verisure_alarm_external

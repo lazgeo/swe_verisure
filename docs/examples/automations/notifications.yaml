@@ -1,0 +1,12 @@
+# Notify on any Verisure panel state change (mobile_app — adjust notifier)
+alias: Verisure state notify
+mode: queued
+trigger:
+  - platform: state
+    entity_id: sensor.my_verisure_panel_state
+condition: []
+action:
+  - service: notify.mobile_app_phones
+    data:
+      title: Verisure
+      message: "Panel state is now {{ states('sensor.my_verisure_panel_state') }}"

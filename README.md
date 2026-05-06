@@ -3,7 +3,13 @@
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
 [![maintainer](https://img.shields.io/badge/maintainer-%40efrain.espada-blue.svg)](https://github.com/efrain.espada)
 
-Custom integration for Home Assistant that connects to the new Verisure/Securitas Direct GraphQL API. This integration provides full control over your Verisure security system including alarm control, sensors, cameras, and smart locks.
+Custom integration for Home Assistant that connects to the Verisure / Securitas Direct GraphQL API. Control alarm modes, read detailed zone status, refresh camera snapshots, and automate via services.
+
+## 📚 Documentation
+
+**Full documentation** (user guide, developer guide, architecture, API reference, examples, roadmap): **[docs/index.md](docs/index.md)** · [Documentation overview](docs/README.md)
+
+Quick links: [Installation](docs/user-guide/installation.md) · [Configuration](docs/user-guide/configuration.md) · [Entities](docs/user-guide/entities.md) · [Services](docs/user-guide/services.md) · [Troubleshooting](docs/user-guide/troubleshooting.md)
 
 ## 🚀 Features
 
@@ -50,26 +56,25 @@ Custom integration for Home Assistant that connects to the new Verisure/Securita
 
 ## 🔧 Available Entities
 
+Home Assistant assigns entity IDs from **friendly names** and **unique IDs** (see `custom_components/my_verisure/`). Typical patterns:
+
 ### Alarm Control Panel
-- **Entity ID**: `alarm_control_panel.my_verisure_alarm_{installation_id}`
-- **States**: `disarmed`, `armed_home`, `armed_away`, `armed_night`, `arming`, `disarming`
-- **Features**: Full alarm control with visual interface
+- **Often**: `alarm_control_panel.my_verisure` (single panel per config entry; verify in **Developer tools → States**)
+- **States**: `disarmed`, `armed_home`, `armed_away`, `armed_night`, transitional states during operations
+- **Features**: ARM_HOME / ARM_NIGHT / ARM_AWAY
 
 ### Sensors
-- **Alarm Status**: `sensor.my_verisure_alarm_status_{installation_id}` - Detailed alarm status
-- **Active Alarms**: `sensor.my_verisure_active_alarms_{installation_id}` - List of active alarms
-- **Panel State**: `sensor.my_verisure_panel_state_{installation_id}` - **Perfect for automations**
-- **Last Updated**: `sensor.my_verisure_last_updated_{installation_id}` - Timestamp of last update
+- **General Alarm Status**, **Active Alarms**, **Panel State** (good for automations), **Last Updated** — entity IDs depend on your install (see [Entities doc](docs/user-guide/entities.md))
 
 ### Binary Sensors
-- **Internal Day**: `binary_sensor.my_verisure_alarm_internal_day_{installation_id}`
-- **Internal Night**: `binary_sensor.my_verisure_alarm_internal_night_{installation_id}`
-- **Internal Total**: `binary_sensor.my_verisure_alarm_internal_total_{installation_id}`
-- **External**: `binary_sensor.my_verisure_alarm_external_{installation_id}`
+- **Internal Day / Night / Total**, **External** — zone booleans (`binary_sensor.*`)
 
-## 📖 Entity Usage Guide
+### Cameras & button
+- Snapshot **camera** entities and **Refresh Camera Images** button when devices exist — see [Entities](docs/user-guide/entities.md)
 
-For detailed information on how to use these entities in automations, dashboards, and scripts, see the [Entities Guide](ENTITIES_GUIDE.md).
+## 📖 Entity usage
+
+See **[docs/user-guide/entities.md](docs/user-guide/entities.md)** and **[docs/user-guide/automations.md](docs/user-guide/automations.md)**.
 
 ## 🚨 Available Services
 
@@ -107,8 +112,9 @@ Disarms the alarm.
 service: my_verisure.disarm
 data:
   installation_id: "6220569"
-  code: "1234"
 ```
+
+Additional services: `my_verisure.get_status`, `my_verisure.refresh_camera_images` — see **[docs/user-guide/services.md](docs/user-guide/services.md)**.
 
 ## 🛠️ Development
 
@@ -209,6 +215,7 @@ my_verisure/
 │   ├── repositories/     # Data access layer
 │   ├── use_cases/        # Business logic
 │   └── tests/            # Core tests
+├── docs/                  # Full documentation site (start at docs/index.md)
 ├── custom_components/     # Home Assistant integration
 │   └── my_verisure/      # Integration code
 ├── requirements.txt       # Dependencies

@@ -1,0 +1,16 @@
+# Alert if last_updated sensor is very old (adjust threshold template)
+alias: Verisure stale data warning
+mode: single
+trigger:
+  - platform: time_pattern
+    hours: "/2"
+condition:
+  - condition: template
+    value_template: >
+      {% set t = states.sensor.my_verisure_last_updated.last_changed %}
+      {{ (now() - t).total_seconds() > 7200 }}
+action:
+  - service: notify.persistent_notification
+    data:
+      title: Verisure
+      message: Data may be stale — check integration logs.

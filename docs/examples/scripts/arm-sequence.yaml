@@ -1,0 +1,12 @@
+# Script — refresh then arm away (sequential)
+alias: Verisure refresh then arm away
+sequence:
+  - service: my_verisure.get_status
+    data:
+      installation_id: INSTALLATION_ID
+  - delay:
+      seconds: 3
+  - service: my_verisure.arm_away
+    data:
+      installation_id: INSTALLATION_ID
+mode: single

@@ -1,0 +1,15 @@
+# Disarm when first person arrives home (example — adapt zone/person)
+alias: Verisure disarm on arrival
+mode: single
+trigger:
+  - platform: state
+    entity_id: person.someone
+    to: "home"
+condition:
+  - condition: state
+    entity_id: alarm_control_panel.my_verisure
+    state: armed_away
+action:
+  - service: my_verisure.disarm
+    data:
+      installation_id: INSTALLATION_ID

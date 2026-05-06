@@ -1,0 +1,9 @@
+# Compact mobile-oriented vertical stack
+type: vertical-stack
+cards:
+  - type: alarm-panel
+    entity: alarm_control_panel.my_verisure
+  - type: entities
+    entities:
+      - entity: sensor.my_verisure_panel_state
+      - entity: sensor.my_verisure_last_updated

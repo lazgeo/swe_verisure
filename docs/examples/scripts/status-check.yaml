@@ -1,0 +1,7 @@
+# Alias-friendly status refresh — same as refresh-status pattern
+alias: Verisure status check
+sequence:
+  - service: my_verisure.get_status
+    data:
+      installation_id: INSTALLATION_ID
+mode: single
