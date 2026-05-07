@@ -1,7 +1,7 @@
 # My Verisure
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
-[![maintainer](https://img.shields.io/badge/maintainer-%40efrain.espada-blue.svg)](https://github.com/efrain.espada)
+[![maintainer](https://img.shields.io/badge/maintainer-%40efraespada-blue.svg)](https://github.com/efraespada)
 
 Custom integration for Home Assistant that connects to the Verisure / Securitas Direct GraphQL API. Control alarm modes, read detailed zone status, refresh camera snapshots, and automate via services.
 
@@ -60,17 +60,21 @@ Quick links: [Installation](docs/user-guide/installation.md) · [Configuration](
 Home Assistant assigns entity IDs from **friendly names** and **unique IDs** (see `custom_components/my_verisure/`). Typical patterns:
 
 ### Alarm Control Panel
+
 - **Often**: `alarm_control_panel.my_verisure` (single panel per config entry; verify in **Developer tools → States**)
 - **States**: `disarmed`, `armed_home`, `armed_away`, `armed_night`, transitional states during operations
 - **Features**: ARM_HOME / ARM_NIGHT / ARM_AWAY
 
 ### Sensors
+
 - **General Alarm Status**, **Active Alarms**, **Panel State** (good for automations), **Last Updated** — entity IDs depend on your install (see [Entities doc](docs/user-guide/entities.md))
 
 ### Binary Sensors
+
 - **Internal Day / Night / Total**, **External** — zone booleans (`binary_sensor.*`)
 
 ### Cameras & button
+
 - Snapshot **camera** entities and **Refresh Camera Images** button when devices exist — see [Entities](docs/user-guide/entities.md)
 
 ## 📖 Entity usage
@@ -80,6 +84,7 @@ See **[docs/user-guide/entities.md](docs/user-guide/entities.md)** and **[docs/u
 ## 🚨 Available Services
 
 ### `my_verisure.arm_away`
+
 Arms the alarm in away mode.
 
 ```yaml
@@ -89,6 +94,7 @@ data:
 ```
 
 ### `my_verisure.arm_home`
+
 Arms the alarm in home mode.
 
 ```yaml
@@ -98,6 +104,7 @@ data:
 ```
 
 ### `my_verisure.arm_night`
+
 Arms the alarm in night mode.
 
 ```yaml
@@ -107,6 +114,7 @@ data:
 ```
 
 ### `my_verisure.disarm`
+
 Disarms the alarm.
 
 ```yaml
@@ -164,6 +172,7 @@ container start     # Start Home Assistant
 **Cursor users:** Works identically to VS Code! All DevContainer features, debugging, and extensions are fully compatible.
 
 **See complete guides:**
+
 - [Local Development Setup](docs/developer-guide/local-development.md)
 - [OrbStack Setup](ORBSTACK_SETUP.md) ← Use this if you have OrbStack
 
@@ -189,12 +198,14 @@ python setup_development.py
 The project includes a comprehensive testing system:
 
 #### 🧪 **Test Suites**
+
 - **CLI Tests**: 92 tests covering command-line interface
 - **Core Tests**: 137 tests covering business logic
 - **Integration Tests**: Complete integration testing
 - **Total**: 229 tests with 100% pass rate
 
 #### 📊 **Coverage Reports**
+
 - **CLI Coverage**: 57% with detailed reports
 - **Core Coverage**: 34% with detailed reports
 - **HTML Reports**: Available in `htmlcov/` directory
@@ -310,4 +321,4 @@ If you encounter any issues or have questions:
 
 ## 📈 Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for a detailed history of changes. 
+See [CHANGELOG.md](CHANGELOG.md) for a detailed history of changes.
