@@ -20,6 +20,12 @@ from .graphql_alarm_queries import (
     DISARM_PANEL_MUTATION,
     DISARM_STATUS_QUERY,
 )
+from ..log_utils import (
+    redact_headers_for_log,
+    redact_sensitive_data,
+    should_log_detailed,
+    truncate_secret,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,6 +38,27 @@ class AlarmClient(BaseClient):
     def __init__(self) -> None:
         """Initialize the alarm client."""
         super().__init__()
+
+    def _log_graphql_outbound(
+        self,
+        operation: str,
+        variables: dict[str, Any],
+        headers: dict[str, str] | None,
+    ) -> None:
+        """One INFO line in production; redacted details only in developer mode."""
+        _LOGGER.info("My Verisure API request: %s", operation)
+        if should_log_detailed():
+            _LOGGER.debug(
+                "%s variables=%s headers=%s",
+                operation,
+                redact_sensitive_data(variables),
+                redact_headers_for_log(headers),
+            )
+
+    def _log_graphql_result(self, operation: str, result: dict[str, Any]) -> None:
+        """Log GraphQL JSON only in developer mode (always redacted)."""
+        if should_log_detailed():
+            _LOGGER.debug("%s result=%s", operation, redact_sensitive_data(result))
 
     async def _load_alarm_status_config(self) -> Dict[str, Any]:
         """Load alarm status configuration from JSON file (cached, non-blocking)."""
@@ -95,7 +122,7 @@ class AlarmClient(BaseClient):
                     alarm_messages = subsection_config.get("alarm", [])
                     if message in alarm_messages:
                         response["internal"][subsection]["status"] = True
-                        _LOGGER.warning(
+                        _LOGGER.debug(
                             "Alarm message '%s' matches %s.%s",
                             message,
                             section,
@@ -105,7 +132,7 @@ class AlarmClient(BaseClient):
                 alarm_messages = section_config.get("alarm", [])
                 if message in alarm_messages:
                     response["external"]["status"] = True
-                    _LOGGER.warning(
+                    _LOGGER.debug(
                         "Alarm message '%s' matches %s", message, section
                     )
 
@@ -150,8 +177,6 @@ class AlarmClient(BaseClient):
                     session_data,
                 )
 
-                _LOGGER.warning("CheckAlarm result: %s", json.dumps(check_alarm_result, indent=2))
-
                 # Check for errors in the CheckAlarm response
                 if "errors" in check_alarm_result:
                     error = (
@@ -193,14 +218,14 @@ class AlarmClient(BaseClient):
                     session_data=session_data,
                 )
 
-                _LOGGER.warning("Alarm message: %s", json.dumps(alarm_message, indent=2))
+                if should_log_detailed():
+                    _LOGGER.debug("Alarm message from API: %s", alarm_message)
 
                 # Process the alarm message and return the structured response
                 if alarm_message:
-                    _LOGGER.warning("Received alarm message: %s", alarm_message)
                     return await self._process_alarm_message(alarm_message)
                 else:
-                    _LOGGER.warning("No alarm message received")
+                    _LOGGER.debug("No alarm message received")
                     return self._get_default_alarm_status()
 
             except Exception as e:
@@ -282,11 +307,11 @@ class AlarmClient(BaseClient):
                     retry_count += 1
                     if retry_count < max_retries:
                         _LOGGER.debug(
-                            "Alarm status check returned WAIT, waiting 5 seconds "
+                            "Alarm status check returned WAIT, waiting 15 seconds "
                             "before retry %d",
                             retry_count + 1,
                         )
-                        await asyncio.sleep(5)  # Wait 5 seconds before retry
+                        await asyncio.sleep(15)  # Wait 15 seconds before retry
                     else:
                         _LOGGER.warning(
                             "Max retries reached for alarm status check"
@@ -405,10 +430,10 @@ class AlarmClient(BaseClient):
                     # Need to wait and retry
                     if retry_count < max_retries:
                         _LOGGER.debug(
-                            "Arm status returned WAIT, waiting 5 seconds "
+                            "Arm status returned WAIT, waiting 15 seconds "
                             "before retry"
                         )
-                        await asyncio.sleep(5)  # Wait 5 seconds before retry
+                        await asyncio.sleep(15)  # Wait 15 seconds before retry
                     else:
                         _LOGGER.warning(
                             "Max retries reached for arm status check"
@@ -425,7 +450,7 @@ class AlarmClient(BaseClient):
 
         except Exception as e:
             _LOGGER.error("Unexpected error sending alarm command: %s", e)
-            return False
+            return ArmResult(success=False, message=f"Unexpected error: {e}")
 
     async def disarm_alarm(
         self,
@@ -469,9 +494,9 @@ class AlarmClient(BaseClient):
                 _LOGGER.error("Failed to send disarm command: %s", disarm_msg)
                 return DisarmResult(success=False, message=disarm_msg)
 
-            _LOGGER.warning(
-                "Disarm command sent successfully, referenceId: %s",
-                reference_id,
+            _LOGGER.info(
+                "Disarm command sent (reference %s)",
+                truncate_secret(str(reference_id)) if reference_id else "n/a",
             )
 
             # Step 2: Poll for status until completion
@@ -534,10 +559,10 @@ class AlarmClient(BaseClient):
                     # Need to wait and retry
                     if retry_count < max_retries:
                         _LOGGER.debug(
-                            "Disarm status returned WAIT, waiting 2 seconds "
+                            "Disarm status returned WAIT, waiting 15 seconds "
                             "before retry"
                         )
-                        await asyncio.sleep(5)  # Wait 5 seconds before retry
+                        await asyncio.sleep(15)  # Wait 15 seconds before retry
                     else:
                         _LOGGER.warning(
                             "Max retries reached for disarm status check"
@@ -552,7 +577,7 @@ class AlarmClient(BaseClient):
 
         except Exception as e:
             _LOGGER.error("Unexpected error disarming alarm: %s", e)
-            return False
+            return DisarmResult(success=False, message=f"Unexpected error: {e}")
 
     async def arm_alarm_away(
         self,
@@ -621,13 +646,12 @@ class AlarmClient(BaseClient):
                 headers["panel"] = panel
                 headers["x-capabilities"] = capabilities
 
-            _LOGGER.warning("Executing CheckAlarm query")
-            _LOGGER.warning("Variables: %s", json.dumps(variables, indent=2))
-            _LOGGER.warning("Headers: %s", json.dumps(headers, indent=2))
+            self._log_graphql_outbound("CheckAlarm", variables, headers)
 
             result = await self._execute_query_direct(
                 CHECK_ALARM_QUERY, variables, headers
             )
+            self._log_graphql_result("CheckAlarm", result)
 
             return result
 
@@ -666,15 +690,13 @@ class AlarmClient(BaseClient):
                 headers["panel"] = panel
                 headers["x-capabilities"] = capabilities
 
-            _LOGGER.warning("Executing CheckAlarmStatus query")
-            _LOGGER.warning("Variables: %s", json.dumps(variables, indent=2))
-            _LOGGER.warning("Headers: %s", json.dumps(headers, indent=2))
+            self._log_graphql_outbound("CheckAlarmStatus", variables, headers)
 
             result = await self._execute_query_direct(
                 CHECK_ALARM_STATUS_QUERY, variables, headers
             )
 
-            _LOGGER.warning("CheckAlarmStatus result: %s", json.dumps(result, indent=2))
+            self._log_graphql_result("CheckAlarmStatus", result)
 
             return result
 
@@ -715,15 +737,13 @@ class AlarmClient(BaseClient):
                 headers["panel"] = panel
                 headers["x-capabilities"] = capabilities
 
-            _LOGGER.warning("Executing ArmPanel mutation")
-            _LOGGER.warning("Variables: %s", json.dumps(variables, indent=2))
-            _LOGGER.warning("Headers: %s", json.dumps(headers, indent=2))
+            self._log_graphql_outbound("ArmPanel", variables, headers)
 
             result = await self._execute_query_direct(
                 ARM_PANEL_MUTATION, variables, headers
             )
 
-            _LOGGER.warning("ArmPanel result: %s", json.dumps(result, indent=2))
+            self._log_graphql_result("ArmPanel", result)
 
             return result
 
@@ -766,15 +786,13 @@ class AlarmClient(BaseClient):
                 headers["panel"] = panel
                 headers["x-capabilities"] = capabilities
 
-            _LOGGER.warning("Executing ArmStatus query")
-            _LOGGER.warning("Variables: %s", json.dumps(variables, indent=2))
-            _LOGGER.warning("Headers: %s", json.dumps(headers, indent=2))
+            self._log_graphql_outbound("ArmStatus", variables, headers)
 
             result = await self._execute_query_direct(
                 ARM_STATUS_QUERY, variables, headers
             )
 
-            _LOGGER.warning("ArmStatus result: %s", json.dumps(result, indent=2))
+            self._log_graphql_result("ArmStatus", result)
 
             return result
 
@@ -811,15 +829,13 @@ class AlarmClient(BaseClient):
                 headers["panel"] = panel
                 headers["x-capabilities"] = capabilities
 
-            _LOGGER.warning("Executing DisarmPanel mutation")
-            _LOGGER.warning("Variables: %s", json.dumps(variables, indent=2))
-            _LOGGER.warning("Headers: %s", json.dumps(headers, indent=2))
+            self._log_graphql_outbound("DisarmPanel", variables, headers)
 
             result = await self._execute_query_direct(
                 DISARM_PANEL_MUTATION, variables, headers
             )
 
-            _LOGGER.warning("DisarmPanel result: %s", json.dumps(result, indent=2))
+            self._log_graphql_result("DisarmPanel", result)
 
             return result
 
@@ -860,15 +876,13 @@ class AlarmClient(BaseClient):
                 headers["panel"] = panel
                 headers["x-capabilities"] = capabilities
 
-            _LOGGER.warning("Executing DisarmStatus query")
-            _LOGGER.warning("Variables: %s", json.dumps(variables, indent=2))
-            _LOGGER.warning("Headers: %s", json.dumps(headers, indent=2))
+            self._log_graphql_outbound("DisarmStatus", variables, headers)
 
             result = await self._execute_query_direct(
                 DISARM_STATUS_QUERY, variables, headers
             )
 
-            _LOGGER.warning("DisarmStatus result: %s", json.dumps(result, indent=2))
+            self._log_graphql_result("DisarmStatus", result)
 
             return result
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 
 from .core.const import DOMAIN, LOGGER, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
 from .coordinator import MyVerisureDataUpdateCoordinator
@@ -22,7 +23,7 @@ PLATFORMS: list[Platform] = [
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up My Verisure from a config entry."""
-    LOGGER.warning("Setting up My Verisure integration")
+    LOGGER.info("Setting up My Verisure integration")
 
     coordinator = MyVerisureDataUpdateCoordinator(hass, entry=entry)
 
@@ -31,13 +32,35 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Check if we have a session (even if expired or empty)
     if coordinator.get_session_hash() is None:
-        LOGGER.warning("No session found - integration will start and attempt automatic authentication during first data update")
+        LOGGER.info("No session found — will attempt authentication on first update")
     elif not coordinator.has_valid_session():
-        LOGGER.warning("Session is expired but integration will start - automatic refresh will be attempted during data updates")
+        LOGGER.info("Session expired — automatic refresh will be attempted on updates")
     else:
-        LOGGER.warning("Valid session found - integration ready")
+        LOGGER.info("Valid session found — integration ready")
 
-    await coordinator.async_config_entry_first_refresh()
+    # Try to load cached data before attempting first refresh
+    cached_data = coordinator.load_alarm_info()
+    
+    try:
+        await coordinator.async_config_entry_first_refresh()
+    except ConfigEntryAuthFailed:
+        LOGGER.error("Authentication failed - invalid credentials")
+        raise
+    except Exception as ex:
+        # If first refresh fails but we have cached data, use it and continue
+        if cached_data:
+            LOGGER.warning(
+                "First refresh failed (%s) but using cached data - integration will continue "
+                "and retry on next update cycle",
+                str(ex),
+            )
+            coordinator.data = cached_data
+        else:
+            LOGGER.error(
+                "First refresh failed and no cached data available: %s",
+                ex,
+            )
+            raise
 
     entry.runtime_data = coordinator
 
@@ -68,28 +91,12 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
 async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Handle options update."""
-    # Propagate configuration change
-    coordinator = entry.runtime_data
-    
-    # Update coordinator with new scan interval (options override data)
-    scan_interval_minutes = entry.options.get(CONF_SCAN_INTERVAL, entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
-    try:
-        scan_interval_minutes = int(scan_interval_minutes)
-    except (ValueError, TypeError):
-        scan_interval_minutes = DEFAULT_SCAN_INTERVAL
-    
-    from datetime import timedelta
-    new_scan_interval = timedelta(minutes=scan_interval_minutes)
-    
-    LOGGER.warning("Updating coordinator scan interval to %s minutes", scan_interval_minutes)
-    coordinator.update_interval = new_scan_interval
-    
-    coordinator.async_update_listeners()
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload My Verisure config entry."""
-    LOGGER.warning("Unloading My Verisure integration")
+    LOGGER.info("Unloading My Verisure integration")
 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if not unload_ok:

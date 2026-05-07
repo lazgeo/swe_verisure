@@ -8,6 +8,7 @@ from ...api.models.domain.session import DeviceIdentifiers
 from ...repositories.interfaces.auth_repository import AuthRepository
 from ..interfaces.auth_use_case import AuthUseCase
 from ...api.exceptions import MyVerisureOTPError
+from ...log_utils import redact_otp_message, redact_sensitive_data, should_log_detailed
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,10 +36,14 @@ class AuthUseCaseImpl(AuthUseCase):
             return result
 
         except MyVerisureOTPError as e:
-            _LOGGER.warning("OTP authentication required: %s", e)
+            _LOGGER.info("OTP authentication required: %s", e)
             # Store OTP data from the auth client for later use
             self._otp_data = self.auth_repository.client._otp_data
-            _LOGGER.warning("Stored OTP data in AuthUseCase: %s", self._otp_data)
+            if should_log_detailed():
+                _LOGGER.debug(
+                    "Stored OTP data in AuthUseCase (redacted): %s",
+                    redact_sensitive_data(self._otp_data),
+                )
             raise
         except Exception as e:
             _LOGGER.error("Unexpected error during login: %s", e)
@@ -65,7 +70,7 @@ class AuthUseCaseImpl(AuthUseCase):
     async def verify_otp(self, otp_code: str) -> bool:
         """Verify OTP code."""
         try:
-            _LOGGER.info("Verifying OTP code: %s", otp_code)
+            _LOGGER.info("Verifying OTP: %s", redact_otp_message())
 
             result = await self.auth_repository.verify_otp(otp_code)
 
@@ -82,33 +87,49 @@ class AuthUseCaseImpl(AuthUseCase):
 
     def get_available_phones(self) -> List[dict]:
         """Get available phone numbers for OTP."""
-        _LOGGER.warning("Getting available phones from auth use case")
-        _LOGGER.warning("AuthUseCase _otp_data: %s", self._otp_data)
-        
+        _LOGGER.debug("Getting available phones from auth use case")
+        if should_log_detailed():
+            _LOGGER.debug(
+                "AuthUseCase _otp_data (redacted): %s",
+                redact_sensitive_data(self._otp_data),
+            )
+
         if not self._otp_data:
-            _LOGGER.warning("No OTP data available in AuthUseCase")
+            _LOGGER.debug("No OTP data available in AuthUseCase")
             return []
-        
+
         # Check if _otp_data is a dictionary with phones
         if isinstance(self._otp_data, dict) and "phones" in self._otp_data:
-            _LOGGER.warning("Using stored OTP data from AuthUseCase")
             phones = self._otp_data.get("phones", [])
-            result = [{"id": phone.get("id"), "phone": phone.get("phone"), "record_id": phone.get("record_id"), "otp_hash": phone.get("otp_hash")} for phone in phones]
-            _LOGGER.warning("Returning %d phones from stored data", len(result))
+            result = [
+                {
+                    "id": phone.get("id"),
+                    "phone": phone.get("phone"),
+                    "record_id": phone.get("record_id"),
+                    "otp_hash": phone.get("otp_hash"),
+                }
+                for phone in phones
+            ]
+            _LOGGER.debug("Returning %d phones from stored data", len(result))
             return result
-        else:
-            # Fallback to client
-            _LOGGER.warning("_otp_data is not a dict, delegating to client")
-            phones = self.auth_repository.client.get_available_phones()
-            _LOGGER.warning("Auth client returned %d phones", len(phones))
-            result = [{"id": phone.id, "phone": phone.phone, "record_id": phone.record_id, "otp_hash": phone.otp_hash} for phone in phones]
-            _LOGGER.warning("Returning %d phones to config flow", len(result))
-            return result
+        # Fallback to client
+        _LOGGER.debug("_otp_data is not a dict, delegating to client")
+        phones = self.auth_repository.client.get_available_phones()
+        result = [
+            {
+                "id": phone.id,
+                "phone": phone.phone,
+                "record_id": phone.record_id,
+                "otp_hash": phone.otp_hash,
+            }
+            for phone in phones
+        ]
+        _LOGGER.debug("Returning %d phones to config flow", len(result))
+        return result
 
     def select_phone(self, phone_id: int) -> bool:
         """Select a phone number for OTP."""
-        _LOGGER.warning("Selecting phone ID: %d", phone_id)
-        _LOGGER.warning("OTP data available: %s", bool(self._otp_data))
+        _LOGGER.debug("Selecting phone ID: %d", phone_id)
 
         if not self._otp_data:
             _LOGGER.error("No OTP data available")
@@ -117,16 +138,20 @@ class AuthUseCaseImpl(AuthUseCase):
         # Check if _otp_data is a dictionary with phones
         if isinstance(self._otp_data, dict) and "phones" in self._otp_data:
             phones = self._otp_data["phones"]
-            _LOGGER.warning("Available phones from stored data: %s", [{"id": p.get("id"), "phone": p.get("phone")} for p in phones])
+            if should_log_detailed():
+                _LOGGER.debug(
+                    "Available phones from stored data (redacted): %s",
+                    redact_sensitive_data(
+                        [{"id": p.get("id"), "phone": p.get("phone")} for p in phones]
+                    ),
+                )
             selected_phone = next((p for p in phones if p.get("id") == phone_id), None)
         else:
             _LOGGER.error("OTP data is not a dictionary with phones: %s", type(self._otp_data))
             return False
 
         if selected_phone:
-            _LOGGER.warning(
-                "Phone selected: ID %d - %s", phone_id, selected_phone.get("phone")
-            )
+            _LOGGER.info("Phone selected for OTP (id=%s)", phone_id)
             return True
         else:
             _LOGGER.error(

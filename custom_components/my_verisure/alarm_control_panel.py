@@ -129,19 +129,19 @@ class MyVerisureAlarmControlPanel(AlarmControlPanelEntity):
         """Return the state of the alarm."""
         # If we're in a transition state, return it immediately
         if self._transition_state:
-            LOGGER.warning("Returning transition state: %s", self._transition_state)
+            LOGGER.debug("Returning transition state: %s", self._transition_state)
             return self._transition_state
 
         if not self.coordinator.data:
-            LOGGER.warning("No coordinator data available")
+            LOGGER.debug("No coordinator data available")
             return None
 
         alarm_data = self.coordinator.data.get("alarm_status", {})
 
         primary_state, detailed_states = self._analyze_alarm_states(alarm_data)
 
-        LOGGER.warning("Primary state: %s", primary_state)
-        LOGGER.warning("Active alarms: %s", detailed_states.get("active_alarms", []))
+        LOGGER.debug("Primary state: %s", primary_state)
+        LOGGER.debug("Active alarms: %s", detailed_states.get("active_alarms", []))
 
         return primary_state
 

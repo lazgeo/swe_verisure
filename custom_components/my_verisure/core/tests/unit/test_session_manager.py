@@ -104,28 +104,50 @@ class TestSessionManager:
                 assert session_manager.is_authenticated is False
 
     def test_is_authenticated_valid_credentials(self):
-        """Test authentication check with valid credentials."""
+        """Test authentication check when user, password and hash are present."""
         with patch('os.path.expanduser', return_value=self.mock_home):
             with patch.object(SessionManager, '_load_session'):
-                with patch.object(SessionManager, '_is_token_valid', return_value=True):
-                    session_manager = SessionManager()
-                    session_manager.username = "user"
-                    session_manager.password = "password"
-                    session_manager.hash_token = "token"
-                    
-                    assert session_manager.is_authenticated is True
+                session_manager = SessionManager()
+                session_manager.username = "user"
+                session_manager.password = "password"
+                session_manager.hash_token = "token"
 
-    def test_is_authenticated_invalid_token(self):
-        """Test authentication check with invalid token."""
+                assert session_manager.is_authenticated is True
+
+    def test_is_authenticated_with_expired_token_still_has_credentials(self):
+        """Credentials present does not imply valid session (token may be expired)."""
         with patch('os.path.expanduser', return_value=self.mock_home):
             with patch.object(SessionManager, '_load_session'):
-                with patch.object(SessionManager, '_is_token_valid', return_value=False):
-                    session_manager = SessionManager()
-                    session_manager.username = "user"
-                    session_manager.password = "password"
-                    session_manager.hash_token = "token"
-                    
-                    assert session_manager.is_authenticated is False
+                session_manager = SessionManager()
+                session_manager.username = "user"
+                session_manager.password = "password"
+                session_manager.hash_token = "token"
+                session_manager.session_timestamp = time.time() - 4000
+
+                assert session_manager.is_authenticated is True
+                assert session_manager.is_session_valid() is False
+
+    def test_can_attempt_refresh_with_username_password_only(self):
+        """Refresh can run when hash is missing but username/password are set."""
+        with patch('os.path.expanduser', return_value=self.mock_home):
+            with patch.object(SessionManager, '_load_session'):
+                session_manager = SessionManager()
+                session_manager.username = "user"
+                session_manager.password = "password"
+                session_manager.hash_token = ""
+                assert session_manager.can_attempt_refresh() is True
+
+    def test_can_attempt_refresh_false_when_service_blocked(self):
+        """Do not refresh while service backoff is active."""
+        with patch('os.path.expanduser', return_value=self.mock_home):
+            with patch.object(SessionManager, '_load_session'):
+                session_manager = SessionManager()
+                session_manager.username = "user"
+                session_manager.password = "password"
+                session_manager.hash_token = "t"
+                session_manager.session_timestamp = time.time() - 4000
+                session_manager.record_service_blocked(cooldown_seconds=3600)
+                assert session_manager.can_attempt_refresh() is False
 
     def test_load_session_success(self):
         """Test successful session loading."""

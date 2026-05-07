@@ -24,12 +24,12 @@ logger = logging.getLogger(__name__)
 
 def setup_dependencies() -> None:
     """Set up all dependencies for the My Verisure integration."""
-    logger.info("Setting up My Verisure dependencies")
+    logger.debug("Setting up My Verisure dependencies")
     
     module = MyVerisureModule()
     
     setup_injector(module)
-    logger.info("My Verisure dependencies setup completed")
+    logger.debug("My Verisure dependencies setup completed")
 
 def get_auth_use_case() -> AuthUseCase:
     """Get the authentication use case."""
@@ -78,5 +78,5 @@ def get_camera_repository() -> CameraRepository:
 def clear_dependencies() -> None:
     """Clear all registered dependencies."""
     clear_injector()
-    logger.info("My Verisure dependencies cleared")
+    logger.debug("My Verisure dependencies cleared")
     

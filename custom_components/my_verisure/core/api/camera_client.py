@@ -15,6 +15,7 @@ from .exceptions import (
 from ..session_manager import get_session_manager
 from ..file_manager import get_file_manager
 from ..api.models.dto.camera_request_image_dto import CameraRequestImageResultDTO
+from ..log_utils import redact_headers_for_log, should_log_detailed, truncate_secret
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -144,16 +145,19 @@ class CameraClient(BaseClient):
                 else None
             )
 
-            _LOGGER.warning("🔑 Headers for camera request: %s", json.dumps(headers, indent=2))
-
             if headers:
                 headers["numinst"] = installation_id
                 headers["panel"] = panel
                 headers["x-capabilities"] = capabilities
 
-            _LOGGER.warning("🔑 Headers for camera request after adding numinst, panel, and x-capabilities: %s", json.dumps(headers, indent=2))
+            _LOGGER.info("My Verisure API request: RequestImages")
+            if should_log_detailed():
+                _LOGGER.debug(
+                    "RequestImages headers (redacted)=%s",
+                    redact_headers_for_log(headers or {}),
+                )
 
-                # Step 1: Execute the first mutation with retry logic for "request_already_exists"
+            # Step 1: Execute the first mutation with retry logic for "request_already_exists"
             reference_id = None
             for attempt in range(1, max_attempts + 1):
                 _LOGGER.info(
@@ -227,8 +231,8 @@ class CameraClient(BaseClient):
                     raise MyVerisureError("No reference ID received from camera service")
 
                 _LOGGER.info(
-                    "✅ Images request submitted successfully. Reference ID: %s. Starting status checking...",
-                    reference_id,
+                    "Camera images request submitted (reference %s)",
+                    truncate_secret(str(reference_id)) if reference_id else "n/a",
                 )
                 break  # Exit the retry loop on success
 

@@ -62,7 +62,8 @@
         "description": "Configure additional options for My Verisure integration.",
         "data": {
           "scan_interval": "Scan interval (minutes)",
-          "auto_arm_perimeter_with_internal": "Arm perimeter alarm when any internal alarm is triggered"
+          "auto_arm_perimeter_with_internal": "Arm perimeter alarm when any internal alarm is triggered",
+          "dev_mode": "Developer mode (verbose redacted logs)"
         }
       }
     }

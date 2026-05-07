@@ -30,7 +30,11 @@ class AuthRepositoryImpl(AuthRepository):
 
             result = await self.client.login(auth.username, auth.password)
 
-            _LOGGER.info("Login result: %s", result)
+            _LOGGER.info(
+                "Login result: success=%s message=%s",
+                getattr(result, "success", False),
+                getattr(result, "message", ""),
+            )
 
             if result and self.client._hash:
                 return AuthResult(
@@ -49,8 +53,7 @@ class AuthRepositoryImpl(AuthRepository):
                 )
             else:
                 _LOGGER.error(
-                    "Login failed - result: %s, hash present: %s",
-                    result,
+                    "Login failed — hash present: %s",
                     "Yes" if self.client._hash else "No",
                 )
                 return AuthResult(success=False, message="Login failed")

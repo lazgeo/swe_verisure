@@ -14,6 +14,7 @@ CONF_PHONE_ID = "phone_id"
 CONF_OTP_CODE = "otp_code"
 CONF_SCAN_INTERVAL = "scan_interval"
 CONF_AUTO_ARM_PERIMETER_WITH_INTERNAL = "auto_arm_perimeter_with_internal"
+CONF_DEV_MODE = "dev_mode"
 
 # Default values
 DEFAULT_SCAN_INTERVAL = 10  # minutes

@@ -21,7 +21,8 @@ Quick links: [Installation](docs/user-guide/installation.md) · [Configuration](
 
 ## 📋 Requirements
 
-- Home Assistant 2024.1.0 or higher
+- Home Assistant 2024.1.0 or higher (integration features)
+- **Home Assistant 2026.3 or higher** to show the bundled integration icon from `custom_components/my_verisure/brand/` in the UI. On older versions you may see a placeholder unless the domain is listed in the [Home Assistant brands](https://github.com/home-assistant/brands) repository.
 - Verisure/Securitas Direct account
 - DNI/NIE and account password
 

@@ -4,5 +4,5 @@
   "homeassistant": "2024.4.0",
   "content_in_root": false,
   "filename": "my_verisure",
-  "icon": "icon.png"
-} 
+  "icon": "custom_components/my_verisure/brand/icon.png"
+}

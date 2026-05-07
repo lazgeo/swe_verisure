@@ -10,6 +10,7 @@ import time
 from typing import Any, Dict, Optional
 
 from .utils.jwt_utils import is_jwt_expired
+from .log_utils import get_dev_mode
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,9 @@ _session_manager_instance: Optional["SessionManager"] = None
 
 # Default cooldown after HTTP 403 / rate limit (seconds)
 DEFAULT_SERVICE_BLOCKED_COOLDOWN = 600
+
+# Local session age after which we treat the hash as stale (seconds)
+TOKEN_MAX_AGE_SECONDS = 3600  # 60 minutes
 
 
 class SessionManager:
@@ -40,11 +44,11 @@ class SessionManager:
 
     @property
     def is_authenticated(self) -> bool:
-        """Check if user is currently authenticated."""
-        if not self.username or not self.password or not self.hash_token:
-            return False
+        """True when username, password and hash_token are present (token may be expired).
 
-        return self._is_token_valid()
+        Use :meth:`is_session_valid` when the API requires a non-expired session.
+        """
+        return bool(self.username and self.password and self.hash_token)
 
     def _get_session_file_path(self) -> str:
         """Get the session file path."""
@@ -71,9 +75,9 @@ class SessionManager:
 
                 if self._is_token_valid():
                     self._is_authenticated = True
-                    logger.warning("Valid session loaded from file")
+                    logger.info("Valid session loaded from file")
                 else:
-                    logger.warning("Session expired, will require re-authentication")
+                    logger.info("Session file present but token expired — re-authentication needed")
 
         except OSError as e:
             logger.warning("Could not load session: %s", e)
@@ -107,7 +111,7 @@ class SessionManager:
         """Persist session to disk without blocking the event loop."""
         try:
             await asyncio.to_thread(self._persist_session_to_disk_sync)
-            logger.warning("Session saved to file")
+            logger.debug("Session saved to file")
         except OSError as e:
             logger.error("Could not save session: %s", e)
 
@@ -115,7 +119,7 @@ class SessionManager:
         """Save session to file synchronously."""
         try:
             self._persist_session_to_disk_sync()
-            logger.warning("Session saved to file")
+            logger.debug("Session saved to file")
         except OSError as e:
             logger.error("Could not save session: %s", e)
 
@@ -124,7 +128,7 @@ class SessionManager:
         try:
             if os.path.exists(self.session_file):
                 os.remove(self.session_file)
-                logger.warning("Session file cleared")
+                logger.debug("Session file cleared")
         except OSError as e:
             logger.warning("Could not clear session file: %s", e)
 
@@ -187,17 +191,19 @@ class SessionManager:
         current_time = time.time()
         token_age = current_time - self.session_timestamp
 
-        if token_age > 360:  # 6 minutes
-            logger.warning("Token expired (age: %.1f seconds)", token_age)
+        if token_age > TOKEN_MAX_AGE_SECONDS:
+            log = logger.warning if get_dev_mode() else logger.debug
+            log("Token expired (age: %.1f seconds)", token_age)
             return False
 
-        logger.warning("Token appears valid (age: %.1f seconds)", token_age)
+        logger.debug("Token appears valid (age: %.1f seconds)", token_age)
         return True
 
     async def _try_automatic_reauthentication(self) -> bool:
         """Try to reauthenticate automatically using stored credentials."""
         if self.is_service_blocked():
-            logger.warning(
+            log = logger.warning if get_dev_mode() else logger.debug
+            log(
                 "Skipping automatic reauthentication while service-blocked backoff is active"
             )
             return False
@@ -205,14 +211,23 @@ class SessionManager:
         now = time.monotonic()
         wait_for = self._last_reauth_attempt_monotonic + self._reauth_backoff_seconds() - now
         if wait_for > 0:
-            logger.warning(
+            log = logger.warning if get_dev_mode() else logger.debug
+            log(
                 "Reauthentication backoff: waiting %.1f seconds before retry",
                 wait_for,
             )
             await asyncio.sleep(wait_for)
 
         try:
-            logger.warning(
+            logger.debug(
+                "AUTH_FLOW[reauth_attempt]: attempt_count=%s, backoff_seconds=%.1f, last_attempt_age=%.1f",
+                self._reauth_failures,
+                self._reauth_backoff_seconds(),
+                time.monotonic() - self._last_reauth_attempt_monotonic
+                if self._last_reauth_attempt_monotonic > 0
+                else 0.0,
+            )
+            logger.info(
                 "Attempting automatic reauthentication with stored credentials..."
             )
 
@@ -239,7 +254,7 @@ class SessionManager:
                     )
                     await self.async_persist_session_to_disk()
                     self.clear_service_blocked()
-                    logger.warning("Automatic reauthentication successful")
+                    logger.info("Automatic reauthentication successful")
                     return True
 
                 self._reauth_failures += 1
@@ -280,7 +295,8 @@ class SessionManager:
 
         if persist:
             self._save_session_sync()
-        logger.warning("Credentials updated%s", "" if persist else " (persist deferred)")
+        log = logger.debug if not get_dev_mode() else logger.info
+        log("Credentials updated%s", "" if persist else " (persist deferred)")
 
     async def async_update_credentials(
         self,
@@ -307,7 +323,7 @@ class SessionManager:
 
         if persist:
             self._clear_session_file_sync()
-        logger.warning("Session cleared and cleaned%s", "" if persist else " (file clear deferred)")
+        logger.info("Session cleared and cleaned%s", "" if persist else " (file clear deferred)")
 
     async def async_clear_credentials(self) -> None:
         """Clear credentials and remove session file without blocking the event loop."""
@@ -343,35 +359,62 @@ class SessionManager:
         current_time = time.time()
         session_age = current_time - self.session_timestamp
 
-        if session_age > 360:  # 6 minutes
-            logger.warning(
-                "Session expired by time (age: %.1f seconds)", session_age
-            )
+        if session_age > TOKEN_MAX_AGE_SECONDS:
+            logger.info("Session expired by time (age: %.1f seconds)", session_age)
             return False
 
         try:
             if is_jwt_expired(self.hash_token):
-                logger.warning("hash_token (JWT) has expired")
+                logger.info("hash_token (JWT) has expired")
                 return False
         except Exception as e:
-            logger.warning("Error checking JWT expiration: %s", e)
+            log = logger.warning if get_dev_mode() else logger.debug
+            log("Error checking JWT expiration: %s", e)
 
         logger.debug("Session appears valid (age: %.1f seconds)", session_age)
         return True
 
+    def can_attempt_refresh(self) -> bool:
+        """True if we should try to refresh the session (have user/pass, not blocked, session invalid).
+
+        Includes the case where hash_token is missing but username/password are set (e.g. from
+        config entry) so :meth:`ensure_authenticated` can run a full login.
+        """
+        has_login_credentials = bool(self.username and self.password)
+        return (
+            has_login_credentials
+            and not self.is_service_blocked()
+            and not self.is_session_valid()
+        )
+
     async def ensure_authenticated(self, interactive: bool = True) -> bool:
-        """Check if we have valid credentials."""
+        """Ensure we have valid authentication, attempting refresh if needed."""
         if not self._session_disk_hydrated:
             await self.async_load_session_from_disk()
 
         if self.is_session_valid():
-            logger.warning("Valid session found, no authentication needed")
+            logger.debug("Valid session found, no authentication needed")
+            logger.debug(
+                "AUTH_FLOW[ensure_authenticated]: result=%s, valid=%s, blocked=%s",
+                "success",
+                self.is_session_valid(),
+                self.is_service_blocked(),
+            )
             return True
 
-        logger.warning(
-            "No valid session found, authentication required. Clearing detailed installation cache."
-        )
+        if self.is_service_blocked():
+            logger.warning(
+                "Service blocked - cannot authenticate, caller should use cached data"
+            )
+            logger.debug(
+                "AUTH_FLOW[ensure_authenticated]: result=%s, valid=%s, blocked=%s",
+                "failed",
+                self.is_session_valid(),
+                self.is_service_blocked(),
+            )
+            return False
 
+        logger.info("Session expired — clearing detailed installation cache")
         from .file_manager import get_file_manager
 
         await get_file_manager().async_delete_files_by_prefix("detailed_installation_")
@@ -379,20 +422,33 @@ class SessionManager:
         if not self.username or not self.password:
             if interactive:
                 self.username, self.password = self._get_user_credentials()
+                logger.debug(
+                    "AUTH_FLOW[ensure_authenticated]: result=%s, valid=%s, blocked=%s",
+                    "success",
+                    self.is_session_valid(),
+                    self.is_service_blocked(),
+                )
                 return True
             logger.error("No credentials available and non-interactive mode")
-            return False
-
-        if self.is_service_blocked():
-            logger.warning(
-                "Skipping automatic reauthentication while service-blocked backoff is active"
+            logger.debug(
+                "AUTH_FLOW[ensure_authenticated]: result=%s, valid=%s, blocked=%s",
+                "failed",
+                self.is_session_valid(),
+                self.is_service_blocked(),
             )
             return False
 
-        logger.warning(
-            "Session expired but credentials available, attempting automatic reauthentication..."
+        logger.info(
+            "Session expired — attempting automatic reauthentication"
         )
-        return await self._try_automatic_reauthentication()
+        reauth_ok = await self._try_automatic_reauthentication()
+        logger.debug(
+            "AUTH_FLOW[ensure_authenticated]: result=%s, valid=%s, blocked=%s",
+            "success" if reauth_ok else "failed",
+            self.is_session_valid(),
+            self.is_service_blocked(),
+        )
+        return reauth_ok
 
     def _get_user_credentials(self) -> tuple[str, str]:
         """Get user credentials interactively."""
@@ -413,9 +469,9 @@ class SessionManager:
 
     async def logout(self) -> None:
         """Logout and clear session."""
-        logger.warning("Logging out and clearing session")
+        logger.info("Logging out and clearing session")
         await self.async_clear_credentials()
-        logger.warning("Logout completed")
+        logger.info("Logout completed")
 
     async def cleanup(self) -> None:
         """Clean up resources."""

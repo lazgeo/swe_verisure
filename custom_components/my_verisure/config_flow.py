@@ -41,6 +41,7 @@ from .core.const import (
     CONF_SCAN_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
     CONF_AUTO_ARM_PERIMETER_WITH_INTERNAL,
+    CONF_DEV_MODE,
 )
 
 
@@ -151,7 +152,7 @@ class MyVerisureConfigFlowHandler(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             phone_id = int(user_input[CONF_PHONE_ID])  # Convert to int
-            LOGGER.warning("Selected phone ID: %d", phone_id)
+            LOGGER.debug("Selected phone ID: %d", phone_id)
             
             try:
                 # Select phone and send OTP
@@ -160,7 +161,10 @@ class MyVerisureConfigFlowHandler(ConfigFlow, domain=DOMAIN):
                     otp_data = self.auth_use_case._otp_data
                     if isinstance(otp_data, dict) and "otp_hash" in otp_data:
                         otp_hash = otp_data["otp_hash"]
-                        LOGGER.warning("Using OTP hash from stored data: %s", otp_hash[:50] + "..." if otp_hash else "None")
+                        LOGGER.debug(
+                            "OTP hash from stored data (truncated): %s",
+                            (otp_hash[:20] + "...") if otp_hash else "None",
+                        )
                         otp_sent = await self.auth_use_case.send_otp(phone_id, otp_hash)
                         if otp_sent:
                             return await self.async_step_otp_verification()
@@ -256,12 +260,12 @@ class MyVerisureConfigFlowHandler(ConfigFlow, domain=DOMAIN):
             
             # Check SessionManager state before getting installations
             session_manager = get_session_manager()
-            LOGGER.warning("SessionManager state before getting installations:")
-            LOGGER.warning("  - SessionManager instance ID: %s", id(session_manager))
-            LOGGER.warning("  - Is authenticated: %s", session_manager.is_authenticated)
-            LOGGER.warning("  - Has hash token: %s", bool(session_manager.get_current_hash_token()))
-            LOGGER.warning("  - Username: %s", session_manager.username)
-            LOGGER.warning("  - Hash token (first 50 chars): %s", session_manager.get_current_hash_token()[:50] + "..." if session_manager.get_current_hash_token() else "None")
+            LOGGER.debug(
+                "SessionManager before installations: authenticated=%s has_token=%s user=%s",
+                session_manager.is_authenticated,
+                bool(session_manager.get_current_hash_token()),
+                session_manager.username,
+            )
             
             self.installation_use_case = get_installation_use_case()
 
@@ -399,6 +403,10 @@ class MyVerisureOptionsFlowHandler(OptionsFlow):
                     vol.Optional(
                         CONF_AUTO_ARM_PERIMETER_WITH_INTERNAL,
                         default=self.config_entry.options.get(CONF_AUTO_ARM_PERIMETER_WITH_INTERNAL, False),
+                    ): bool,
+                    vol.Optional(
+                        CONF_DEV_MODE,
+                        default=self.config_entry.options.get(CONF_DEV_MODE, False),
                     ): bool,
                 }
             ),

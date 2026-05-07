@@ -15,6 +15,12 @@ from .exceptions import (
 )
 from .models.dto.auth_dto import AuthDTO, PhoneDTO
 from ..session_manager import get_session_manager
+from ..log_utils import (
+    redact_otp_message,
+    redact_sensitive_data,
+    should_log_detailed,
+    truncate_secret,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -87,7 +93,7 @@ class AuthClient(BaseClient):
 
     def __init__(self) -> None:
         """Initialize the authentication client."""
-        _LOGGER.warning("🔧 AuthClient constructor called - instance: %s", id(self))
+        _LOGGER.debug("AuthClient initialized (id=%s)", id(self))
         super().__init__()
         self._otp_data: Optional[Dict[str, Any]] = None
         self._device_manager = DeviceManager()
@@ -110,9 +116,13 @@ class AuthClient(BaseClient):
         )
 
         try:
-            _LOGGER.warning("Attempting login with native app simulation")
-            _LOGGER.warning("Device UUID: %s", variables.get("uuid"))
-            _LOGGER.warning("Device Name: %s", variables.get("deviceName"))
+            _LOGGER.info("Attempting My Verisure login")
+            if should_log_detailed():
+                _LOGGER.debug(
+                    "Login device context (redacted): uuid=%s name=%s",
+                    variables.get("uuid"),
+                    variables.get("deviceName"),
+                )
 
             # Use direct aiohttp request to control headers/session lifecycle
             result = await self._execute_query_direct(
@@ -159,16 +169,21 @@ class AuthClient(BaseClient):
                 self._hash = login_data.get("hash")
                 self._refresh_token = login_data.get("refreshToken")
 
-                _LOGGER.warning("Successfully logged in to My Verisure")
-                _LOGGER.warning("Session data: %s", self._session_data)
-
+                _LOGGER.info("Successfully logged in to My Verisure")
+                if should_log_detailed():
+                    _LOGGER.debug(
+                        "Session data (redacted): %s",
+                        redact_sensitive_data(self._session_data),
+                    )
 
                 # Update SessionManager with new credentials
                 session_manager = get_session_manager()
-                _LOGGER.warning("AuthClient updating SessionManager:")
-                _LOGGER.warning("  - SessionManager instance ID: %s", id(session_manager))
-                _LOGGER.warning("  - Username: %s", user)
-                _LOGGER.warning("  - Hash token: %s", self._hash[:50] + "..." if self._hash else "None")
+                if should_log_detailed():
+                    _LOGGER.debug(
+                        "Updating session for user=%s hash=%s",
+                        user,
+                        truncate_secret(self._hash),
+                    )
                 await session_manager.async_update_credentials(
                     user,
                     password,
@@ -176,31 +191,34 @@ class AuthClient(BaseClient):
                     self._refresh_token,
                 )
                 session_manager.clear_service_blocked()
-                _LOGGER.warning("SessionManager updated with new credentials")
+                _LOGGER.debug("SessionManager updated with new credentials")
 
                 # Convert to DTO
                 auth_dto = AuthDTO.from_dict(login_data)
 
                 # Check if device authorization is needed
                 need_device_auth = login_data.get("needDeviceAuthorization")
-                _LOGGER.warning("needDeviceAuthorization: %s", need_device_auth)
-                
+                if should_log_detailed():
+                    _LOGGER.debug("needDeviceAuthorization=%s", need_device_auth)
+
                 if need_device_auth is True:
-                    _LOGGER.warning(
-                        "Device authorization required - checking if device is already authorized"
+                    _LOGGER.info(
+                        "Device authorization required — checking authorization state"
                     )
                     # First try to check if device is already authorized
                     try:
                         return await self._check_device_authorization()
                     except MyVerisureOTPError:
                         # Device needs OTP authorization
-                        _LOGGER.warning("Device requires OTP authorization")
+                        _LOGGER.info("Device requires OTP authorization")
                         return await self._complete_device_authorization()
                     except Exception as e:
-                        _LOGGER.warning("Device authorization check failed, proceeding with OTP: %s", e)
+                        _LOGGER.info(
+                            "Device authorization check failed, proceeding with OTP: %s", e
+                        )
                         return await self._complete_device_authorization()
                 else:
-                    _LOGGER.warning("Device authorization not required - login successful")
+                    _LOGGER.debug("Device authorization not required — login complete")
                     return auth_dto
             else:
                 error_msg = (
@@ -229,7 +247,7 @@ class AuthClient(BaseClient):
         variables = self._device_manager.get_validation_variables()
 
         try:
-            _LOGGER.warning("Checking if device is already authorized...")
+            _LOGGER.info("Checking if device is already authorized")
 
             # Use session headers for device validation
             session_headers = self._get_session_headers(
@@ -247,7 +265,7 @@ class AuthClient(BaseClient):
             _LOGGER.debug("Device validation response: %s", device_data)
             
             if device_data.get("res") == "OK":
-                _LOGGER.warning("Device is already authorized - no OTP required")
+                _LOGGER.info("Device is already authorized — no OTP required")
                 # Device is authorized, return success
                 return AuthDTO(
                     res="OK",
@@ -261,7 +279,11 @@ class AuthClient(BaseClient):
                 )
             else:
                 # Device needs authorization
-                _LOGGER.warning("Device requires authorization - response: %s", device_data)
+                if should_log_detailed():
+                    _LOGGER.debug(
+                        "Device requires authorization (redacted): %s",
+                        redact_sensitive_data(device_data),
+                    )
                 raise MyVerisureOTPError("Device authorization required")
 
         except MyVerisureOTPError:
@@ -280,7 +302,7 @@ class AuthClient(BaseClient):
         variables = self._device_manager.get_validation_variables()
 
         try:
-            _LOGGER.warning("Validating device...")
+            _LOGGER.info("Validating device with My Verisure")
 
             # Use session headers for device validation
             session_headers = self._get_session_headers(
@@ -299,7 +321,7 @@ class AuthClient(BaseClient):
             if device_data and device_data.get("res") == "OK":
                 self._hash = device_data.get("hash")
                 self._refresh_token = device_data.get("refreshToken")
-                _LOGGER.warning("Device validation successful")
+                _LOGGER.info("Device validation successful")
                 return AuthDTO.from_dict(device_data)
 
             # Check for errors that require OTP
@@ -309,14 +331,15 @@ class AuthClient(BaseClient):
                 auth_code = error_data.get("auth-code")
                 auth_type = error_data.get("auth-type")
 
-                _LOGGER.warning(
-                    "Device validation error - auth-code: %s, auth-type: %s",
-                    auth_code,
-                    auth_type,
-                )
+                if should_log_detailed():
+                    _LOGGER.debug(
+                        "Device validation error — auth-code=%s auth-type=%s",
+                        auth_code,
+                        auth_type,
+                    )
 
                 if auth_type == "OTP" or auth_code == "10001":
-                    _LOGGER.warning("OTP authentication required")
+                    _LOGGER.info("OTP authentication required")
                     return await self._handle_otp_authentication(error_data)
                 elif auth_code == "10010":
                     _LOGGER.error(
@@ -369,28 +392,33 @@ class AuthClient(BaseClient):
             phone["record_id"] = phone.get("id")  # Use phone ID as record_id
         
         self._otp_data = {"phones": auth_phones, "otp_hash": otp_hash}
-        _LOGGER.warning("🔧 OTP data set: %s", self._otp_data)
+        if should_log_detailed():
+            _LOGGER.debug(
+                "OTP flow data (redacted): %s",
+                redact_sensitive_data(self._otp_data),
+            )
 
-        _LOGGER.warning("📱 Available phone numbers for OTP:")
-        for phone in auth_phones:
-            _LOGGER.warning("  ID %d: %s", phone.get("id"), phone.get("phone"))
+        _LOGGER.info("OTP required — %d phone(s) available for SMS", len(auth_phones))
 
         # Don't automatically send OTP - let the config flow handle it
-        _LOGGER.warning("🚨 Raising MyVerisureOTPError - OTP data should be preserved")
-        _LOGGER.warning("🔧 Final OTP data before exception: %s", self._otp_data)
+        _LOGGER.debug("Raising OTP error for config flow to continue")
         raise MyVerisureOTPError(
             "OTP authentication required - please select phone number"
         )
 
     def get_available_phones(self) -> list[PhoneDTO]:
         """Get available phone numbers for OTP."""
-        _LOGGER.warning("Getting available phones, _otp_data: %s", self._otp_data)
+        if should_log_detailed():
+            _LOGGER.debug(
+                "get_available_phones — otp_data (redacted): %s",
+                redact_sensitive_data(self._otp_data),
+            )
         if not self._otp_data:
-            _LOGGER.warning("No OTP data available - device may already be authorized")
+            _LOGGER.debug("No OTP data — device may already be authorized")
             return []
 
         phones = self._otp_data.get("phones", [])
-        _LOGGER.warning("Found %d phones in OTP data", len(phones))
+        _LOGGER.debug("Found %d phone(s) for OTP", len(phones))
         return [PhoneDTO.from_dict(phone) for phone in phones]
 
     def select_phone(self, phone_id: int) -> bool:
@@ -408,11 +436,12 @@ class AuthClient(BaseClient):
 
         if selected_phone:
             self._otp_data["selected_phone"] = selected_phone
-            _LOGGER.warning(
-                "📞 Phone selected: ID %d - %s",
-                phone_id,
-                selected_phone.get("phone"),
-            )
+            _LOGGER.info("OTP phone selected (id=%s)", phone_id)
+            if should_log_detailed():
+                _LOGGER.debug(
+                    "Selected phone detail (redacted): %s",
+                    redact_sensitive_data(selected_phone),
+                )
             return True
         else:
             _LOGGER.error(
@@ -426,9 +455,9 @@ class AuthClient(BaseClient):
         variables = {"recordId": record_id, "otpHash": otp_hash}
 
         try:
-            _LOGGER.warning("=== SENDING OTP ===")
-            _LOGGER.warning("Record ID: %s", record_id)
-            _LOGGER.warning("OTP Hash: %s", otp_hash)
+            _LOGGER.info("Sending OTP SMS (record_id=%s)", record_id)
+            if should_log_detailed():
+                _LOGGER.debug("OTP hash (truncated): %s", truncate_secret(otp_hash))
             
             # Update OTP data with the current hash
             if self._otp_data:
@@ -452,12 +481,9 @@ class AuthClient(BaseClient):
             otp_response = data.get("xSSendOtp", {})
 
             if otp_response and otp_response.get("res") == "OK":
-                _LOGGER.warning(
-                    "OTP sent successfully: %s", otp_response.get("msg")
-                )
-                _LOGGER.warning(
-                    "Please check your phone for the SMS and enter the OTP code"
-                )
+                _LOGGER.info("OTP SMS sent successfully")
+                if should_log_detailed():
+                    _LOGGER.debug("OTP send response: %s", otp_response.get("msg"))
                 return True
             else:
                 error_msg = (
@@ -486,9 +512,9 @@ class AuthClient(BaseClient):
                 "No OTP hash available. Please send OTP first."
             )
 
-        _LOGGER.warning("=== VERIFYING OTP ===")
-        _LOGGER.warning("OTP Code: %s", otp_code)
-        _LOGGER.warning("OTP Hash: %s", otp_hash)
+        _LOGGER.info("Verifying OTP: %s", redact_otp_message())
+        if should_log_detailed():
+            _LOGGER.debug("OTP hash (truncated): %s", truncate_secret(otp_hash))
 
         try:
             # Use the same device validation mutation but with OTP verification headers
@@ -527,10 +553,13 @@ class AuthClient(BaseClient):
                 self._hash = validation_response.get("hash")
                 refresh_hash = validation_response.get("refreshToken")
 
-                # Log the tokens from OTP verification
-                _LOGGER.warning("=== OTP VERIFICATION SUCCESSFUL ===")
-                _LOGGER.warning("Hash Token from OTP: %s", self._hash)
-                _LOGGER.warning("Refresh Token from OTP: %s", refresh_hash)
+                _LOGGER.info("OTP verification successful — session updated")
+                if should_log_detailed():
+                    _LOGGER.debug(
+                        "Tokens from OTP (truncated): hash=%s refresh=%s",
+                        truncate_secret(self._hash),
+                        truncate_secret(refresh_hash),
+                    )
 
                 # Check if device authorization is still needed
                 need_device_authorization = validation_response.get(
@@ -548,9 +577,7 @@ class AuthClient(BaseClient):
                     )
 
                 # Now perform a new login to get updated tokens
-                _LOGGER.warning(
-                    "OTP verification successful! Performing new login to get updated tokens..."
-                )
+                _LOGGER.info("Completing post-OTP login for fresh tokens")
 
                 try:
                     # Perform a new login to get fresh tokens
@@ -558,7 +585,7 @@ class AuthClient(BaseClient):
 
                 except Exception as e:
                     _LOGGER.warning(
-                        "Post-OTP login failed: %s, but OTP verification was successful",
+                        "Post-OTP login failed (%s); using tokens from OTP step",
                         e,
                     )
                     # Even if post-OTP login fails, we still have valid tokens from OTP verification
@@ -609,9 +636,13 @@ class AuthClient(BaseClient):
         )
 
         try:
-            _LOGGER.warning("Performing post-OTP login to get updated tokens...")
-            _LOGGER.warning("Device UUID: %s", variables.get("uuid"))
-            _LOGGER.warning("Device Name: %s", variables.get("deviceName"))
+            _LOGGER.info("Performing post-OTP login")
+            if should_log_detailed():
+                _LOGGER.debug(
+                    "Post-OTP device context: uuid=%s name=%s",
+                    variables.get("uuid"),
+                    variables.get("deviceName"),
+                )
 
             result = await self._execute_query_direct(
                 LOGIN_MUTATION,
@@ -664,21 +695,14 @@ class AuthClient(BaseClient):
                     self._refresh_token,
                 )
                 session_manager.clear_service_blocked()
-                _LOGGER.warning("SessionManager updated with new credentials")
+                _LOGGER.info("Post-OTP login successful")
 
-                _LOGGER.warning("Post-OTP login successful!")
-                _LOGGER.warning(
-                    "Updated hash token obtained: %s",
-                    self._hash[:50] + "..." if self._hash else "None",
-                )
-                _LOGGER.warning(
-                    "Updated refresh token obtained: %s",
-                    (
-                        self._refresh_token[:50] + "..."
-                        if self._refresh_token
-                        else "None"
-                    ),
-                )
+                if should_log_detailed():
+                    _LOGGER.debug(
+                        "Updated tokens (truncated): hash=%s refresh=%s",
+                        truncate_secret(self._hash),
+                        truncate_secret(self._refresh_token),
+                    )
 
                 return AuthDTO.from_dict(login_data)
             else:

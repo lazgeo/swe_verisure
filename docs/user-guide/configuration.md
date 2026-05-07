@@ -37,7 +37,7 @@ Options override entry `data` for scan interval (see `update_listener` in [`inte
 ## Session persistence
 
 - Session material is tied to the account; paths use `STORAGE_DIR` / `my_verisure_{user}.json` pattern in [`coordinator.py`](../../custom_components/my_verisure/coordinator.py).  
-- Coordinator attempts **refresh** then **new login** if needed (`async_login`, `async_refresh_session`, `_perform_new_login`).  
+- Coordinator uses **`async_login`** → **`async_refresh_session`** → **`SessionManager.ensure_authenticated`** (single reauth path via `auth_use_case.login`; no separate `_perform_new_login`).  
 - **Reauth** flow exists (`async_step_reauth`); OTP during reauth surfaces as `otp_required` error by design in current code.  
 
 For deeper behavior see [Session persistence](../technical/session-persistence.md).
