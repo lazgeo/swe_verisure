@@ -381,10 +381,6 @@ class MyVerisureConfigFlowHandler(ConfigFlow, domain=DOMAIN):
 class MyVerisureOptionsFlowHandler(OptionsFlow):
     """Handle My Verisure options."""
 
-    def __init__(self) -> None:
-        """Initialize options flow (config_entry is provided by Home Assistant)."""
-        super().__init__()
-
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
