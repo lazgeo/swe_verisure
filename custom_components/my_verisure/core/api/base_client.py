@@ -86,7 +86,15 @@ class BaseClient:
             ) as response:
                 # Check for HTTP 403 status code (service blocked)
                 if response.status == 403:
-                    _LOGGER.error("Service temporarily blocked (HTTP 403) - too many requests")
+                    _LOGGER.error(
+                        "Service temporarily blocked (HTTP 403) - too many requests"
+                    )
+                    try:
+                        from ..session_manager import get_session_manager
+
+                        get_session_manager().record_service_blocked()
+                    except Exception:  # noqa: BLE001
+                        _LOGGER.debug("Could not record service-blocked backoff", exc_info=True)
                     raise MyVerisureServiceBlockedError(
                         "Service temporarily blocked due to too many requests. Please wait about 10 minutes before trying again."
                     )

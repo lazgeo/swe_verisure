@@ -62,7 +62,7 @@ class MyVerisureConfigFlowHandler(ConfigFlow, domain=DOMAIN):
         config_entry: ConfigEntry,
     ) -> MyVerisureOptionsFlowHandler:
         """Get the options flow for this handler."""
-        return MyVerisureOptionsFlowHandler(config_entry)
+        return MyVerisureOptionsFlowHandler()
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -86,8 +86,9 @@ class MyVerisureConfigFlowHandler(ConfigFlow, domain=DOMAIN):
             self.session_manager.update_credentials(
                 self.user,
                 self.password,
-                "",  # hash_token will be set after login
-                ""   # refresh_token will be set after login
+                "",
+                "",
+                persist=False,
             )
 
             try:
@@ -380,9 +381,9 @@ class MyVerisureConfigFlowHandler(ConfigFlow, domain=DOMAIN):
 class MyVerisureOptionsFlowHandler(OptionsFlow):
     """Handle My Verisure options."""
 
-    def __init__(self, config_entry: ConfigEntry) -> None:
-        """Initialize options flow."""
-        self.config_entry = config_entry
+    def __init__(self) -> None:
+        """Initialize options flow (config_entry is provided by Home Assistant)."""
+        super().__init__()
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None

@@ -1,5 +1,8 @@
 """Create dummy camera images use case implementation."""
 
+from __future__ import annotations
+
+import asyncio
 import logging
 import os
 from datetime import datetime
@@ -64,17 +67,19 @@ class CreateDummyCameraImagesUseCaseImpl(CreateDummyCameraImagesUseCase):
             # Get the data directory path
             data_path = get_file_manager().get_data_directory()
             cameras_dir = os.path.join(data_path, "cameras")
-            
-            # Create cameras directory if it doesn't exist
-            os.makedirs(cameras_dir, exist_ok=True)
-            
+
+            await asyncio.to_thread(
+                lambda: os.makedirs(cameras_dir, exist_ok=True)
+            )
+
             for camera_device in camera_devices:
                 try:
                     formatted_code = f"{camera_device.type}{int(camera_device.code):02d}"
                     camera_dir = os.path.join(cameras_dir, formatted_code)
-                    
-                    # Check if camera already has images
-                    if self._camera_has_existing_images(camera_dir):
+
+                    if await asyncio.to_thread(
+                        self._camera_has_existing_images, camera_dir
+                    ):
                         _LOGGER.info(
                             "⏭️ Camera %s (%s) already has images, skipping dummy creation",
                             camera_device.name,
@@ -90,17 +95,18 @@ class CreateDummyCameraImagesUseCaseImpl(CreateDummyCameraImagesUseCase):
                         )
                         continue
                     
-                    # Create camera directory if it doesn't exist
-                    os.makedirs(camera_dir, exist_ok=True)
-                    
-                    # Create timestamp directory (current date and time)
                     now = datetime.now()
                     timestamp_dir = now.strftime("%Y-%m-%d_%H-%M-%S")
                     timestamp_path = os.path.join(camera_dir, timestamp_dir)
-                    os.makedirs(timestamp_path, exist_ok=True)
-                    
-                    # Create dummy black images
-                    dummy_images_created = self._create_dummy_images(timestamp_path)
+                    await asyncio.to_thread(
+                        self._sync_prepare_camera_dummy_dirs,
+                        camera_dir,
+                        timestamp_path,
+                    )
+
+                    dummy_images_created = await asyncio.to_thread(
+                        self._create_dummy_images, timestamp_path
+                    )
                     
                     refresh_data.append(
                         CameraRefreshData(
@@ -155,6 +161,12 @@ class CreateDummyCameraImagesUseCaseImpl(CreateDummyCameraImagesUseCase):
                 failed_refreshes=0,
                 timestamp=datetime.now().isoformat(),
             )
+
+    @staticmethod
+    def _sync_prepare_camera_dummy_dirs(camera_dir: str, timestamp_path: str) -> None:
+        """Create camera and timestamp directories (blocking I/O)."""
+        os.makedirs(camera_dir, exist_ok=True)
+        os.makedirs(timestamp_path, exist_ok=True)
 
     def _camera_has_existing_images(self, camera_dir: str) -> bool:
         """Check if camera already has existing images."""

@@ -33,8 +33,12 @@ class TestInstallationRepository:
     def installation_repository(self, mock_client):
         """Create InstallationRepository instance with mocked client."""
         repo = InstallationRepositoryImpl(client=mock_client)
-        # Clear cache before each test
-        repo._clear_cache()
+        mock_fm = Mock()
+        mock_fm.async_load_json = AsyncMock(return_value=None)
+        mock_fm.async_save_json = AsyncMock(return_value=True)
+        mock_fm.async_delete_file = AsyncMock(return_value=True)
+        mock_fm.async_list_files = AsyncMock(return_value=[])
+        repo._file_manager = mock_fm
         return repo
 
     def test_installation_repository_implements_interface(
@@ -99,9 +103,7 @@ class TestInstallationRepository:
         assert result[1].numinst == "67890"
         assert result[1].alias == "Office"
         assert result[1].type == "commercial"
-        mock_client.get_installations.assert_called_once_with(
-            hash_token="test_hash_token_12345", session_data=mock_client._session_data
-        )
+        mock_client.get_installations.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_get_installations_empty(
@@ -116,9 +118,7 @@ class TestInstallationRepository:
 
         # Assert
         assert result == []
-        mock_client.get_installations.assert_called_once_with(
-            hash_token="test_hash_token_12345", session_data=mock_client._session_data
-        )
+        mock_client.get_installations.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_get_installations_raises_exception(
@@ -205,7 +205,8 @@ class TestInstallationRepository:
         assert result.installation.status == "active"
         assert result.installation.panel == "panel1"
         mock_client.get_installation_services.assert_called_once_with(
-            installation_id, False, hash_token="test_hash_token_12345", session_data=mock_client._session_data
+            installation_id,
+            False,
         )
 
     @pytest.mark.asyncio

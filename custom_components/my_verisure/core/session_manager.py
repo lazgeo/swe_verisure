@@ -1,22 +1,29 @@
 """Session manager for My Verisure integration."""
 
+from __future__ import annotations
+
+import asyncio
 import json
 import logging
 import os
 import time
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
+
 from .utils.jwt_utils import is_jwt_expired
 
 logger = logging.getLogger(__name__)
 
 # Global singleton instance
-_session_manager_instance: Optional['SessionManager'] = None
+_session_manager_instance: Optional["SessionManager"] = None
+
+# Default cooldown after HTTP 403 / rate limit (seconds)
+DEFAULT_SERVICE_BLOCKED_COOLDOWN = 600
 
 
 class SessionManager:
     """Manages authentication session for My Verisure integration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._is_authenticated = False
         self.current_installation = None
         self.session_file = self._get_session_file_path()
@@ -25,83 +32,147 @@ class SessionManager:
         self.hash_token = None
         self.refresh_token = None
         self.session_timestamp = None
-
-        # Try to load existing session
-        self._load_session()
+        self._session_disk_hydrated = False
+        # After HTTP 403: pause automatic logins until this monotonic deadline
+        self._service_blocked_until: float = 0.0
+        self._reauth_failures = 0
+        self._last_reauth_attempt_monotonic: float = 0.0
 
     @property
     def is_authenticated(self) -> bool:
         """Check if user is currently authenticated."""
-        # Check if we have valid credentials and token
         if not self.username or not self.password or not self.hash_token:
             return False
-        
-        # Check if token is still valid
+
         return self._is_token_valid()
 
     def _get_session_file_path(self) -> str:
         """Get the session file path."""
-        # Create .my_verisure directory in user's home
         home_dir = os.path.expanduser("~")
         session_dir = os.path.join(home_dir, ".my_verisure")
         os.makedirs(session_dir, exist_ok=True)
         return os.path.join(session_dir, "session.json")
 
-    def _load_session(self) -> None:
-        """Load session from file."""
+    def _hydrate_session_from_disk_sync(self) -> None:
+        """Load session from file (blocking I/O)."""
         try:
             if os.path.exists(self.session_file):
-                with open(self.session_file, 'r') as f:
+                with open(self.session_file, encoding="utf-8") as f:
                     session_data = json.load(f)
 
-                self.username = session_data.get('username')
-                self.password = session_data.get('password')
-                self.hash_token = session_data.get('hash_token')
-                self.refresh_token = session_data.get('refresh_token')
-                self.session_timestamp = session_data.get('session_timestamp')
-                self.current_installation = session_data.get('current_installation')
-                
-                # Check if session is still valid
+                self.username = session_data.get("username")
+                self.password = session_data.get("password")
+                self.hash_token = session_data.get("hash_token")
+                self.refresh_token = session_data.get("refresh_token")
+                self.session_timestamp = session_data.get("session_timestamp")
+                self.current_installation = session_data.get(
+                    "current_installation"
+                )
+
                 if self._is_token_valid():
                     self._is_authenticated = True
                     logger.warning("Valid session loaded from file")
                 else:
                     logger.warning("Session expired, will require re-authentication")
 
-        except Exception as e:
-            logger.warning(f"Could not load session: {e}")
+        except OSError as e:
+            logger.warning("Could not load session: %s", e)
+        except json.JSONDecodeError as e:
+            logger.warning("Could not parse session file: %s", e)
 
-    def _save_session(self) -> None:
-        """Save session to file."""
-        try:
-            session_data = {
-                'username': self.username,
-                'password': self.password,
-                'hash_token': self.hash_token,
-                'refresh_token': self.refresh_token,
-                'session_timestamp': self.session_timestamp,
-                'current_installation': self.current_installation,
-            }
-            
-            # Write directly to avoid concurrency issues
-            self._write_session_file(session_data)
-            logger.warning("Session saved to file")
-        except Exception as e:
-            logger.error(f"Could not save session: {e}")
+    def load_session_sync(self) -> None:
+        """Load session from disk synchronously (CLI / tests)."""
+        self._hydrate_session_from_disk_sync()
+        self._session_disk_hydrated = True
 
-    def _write_session_file(self, session_data: dict) -> None:
-        """Write session data to file (blocking operation)."""
-        with open(self.session_file, 'w') as f:
+    async def async_load_session_from_disk(self) -> None:
+        """Load session from disk without blocking the event loop."""
+        await asyncio.to_thread(self._hydrate_session_from_disk_sync)
+        self._session_disk_hydrated = True
+
+    def _persist_session_to_disk_sync(self) -> None:
+        """Write session to file (blocking I/O)."""
+        session_data = {
+            "username": self.username,
+            "password": self.password,
+            "hash_token": self.hash_token,
+            "refresh_token": self.refresh_token,
+            "session_timestamp": self.session_timestamp,
+            "current_installation": self.current_installation,
+        }
+        with open(self.session_file, "w", encoding="utf-8") as f:
             json.dump(session_data, f)
 
-    def _clear_session_file(self) -> None:
-        """Clear session file."""
+    async def async_persist_session_to_disk(self) -> None:
+        """Persist session to disk without blocking the event loop."""
+        try:
+            await asyncio.to_thread(self._persist_session_to_disk_sync)
+            logger.warning("Session saved to file")
+        except OSError as e:
+            logger.error("Could not save session: %s", e)
+
+    def _save_session_sync(self) -> None:
+        """Save session to file synchronously."""
+        try:
+            self._persist_session_to_disk_sync()
+            logger.warning("Session saved to file")
+        except OSError as e:
+            logger.error("Could not save session: %s", e)
+
+    def _clear_session_file_sync(self) -> None:
+        """Remove session file (blocking I/O)."""
         try:
             if os.path.exists(self.session_file):
                 os.remove(self.session_file)
                 logger.warning("Session file cleared")
-        except Exception as e:
-            logger.warning(f"Could not clear session file: {e}")
+        except OSError as e:
+            logger.warning("Could not clear session file: %s", e)
+
+    async def async_clear_session_file(self) -> None:
+        """Remove session file without blocking the event loop."""
+        await asyncio.to_thread(self._clear_session_file_sync)
+
+    def _load_session(self) -> None:
+        """Load session synchronously (tests / legacy); prefer async_load_session_from_disk."""
+        self.load_session_sync()
+
+    def _save_session(self) -> None:
+        """Deprecated alias for tests: use _save_session_sync."""
+        self._save_session_sync()
+
+    def _write_session_file(self, session_data: dict) -> None:
+        """Write session data to file (blocking operation)."""
+        with open(self.session_file, "w", encoding="utf-8") as f:
+            json.dump(session_data, f)
+
+    def _clear_session_file(self) -> None:
+        """Clear session file (blocking)."""
+        self._clear_session_file_sync()
+
+    def record_service_blocked(self, cooldown_seconds: float = DEFAULT_SERVICE_BLOCKED_COOLDOWN) -> None:
+        """Record that the remote service blocked us (e.g. HTTP 403); pause aggressive retries."""
+        self._service_blocked_until = max(
+            self._service_blocked_until,
+            time.monotonic() + cooldown_seconds,
+        )
+        logger.warning(
+            "Service blocked backoff active for %.0f seconds", cooldown_seconds
+        )
+
+    def clear_service_blocked(self) -> None:
+        """Clear service-blocked backoff after a successful auth."""
+        self._service_blocked_until = 0.0
+        self._reauth_failures = 0
+
+    def is_service_blocked(self) -> bool:
+        """Return True if we should avoid hammering login / reauth."""
+        return time.monotonic() < self._service_blocked_until
+
+    def _reauth_backoff_seconds(self) -> float:
+        """Exponential backoff for automatic reauthentication (capped)."""
+        base = 30.0
+        cap = 600.0
+        return min(cap, base * (2 ** min(self._reauth_failures, 5)))
 
     def _is_token_valid(self) -> bool:
         """Check if the stored hash token is still valid."""
@@ -113,75 +184,118 @@ class SessionManager:
             logger.debug("No session timestamp available")
             return False
 
-        # Check if token is not too old (6 minutes = 360 seconds)
         current_time = time.time()
         token_age = current_time - self.session_timestamp
 
         if token_age > 360:  # 6 minutes
-            logger.warning(f"Token expired (age: {token_age:.1f} seconds)")
+            logger.warning("Token expired (age: %.1f seconds)", token_age)
             return False
 
-        logger.warning(f"Token appears valid (age: {token_age:.1f} seconds)")
+        logger.warning("Token appears valid (age: %.1f seconds)", token_age)
         return True
 
     async def _try_automatic_reauthentication(self) -> bool:
         """Try to reauthenticate automatically using stored credentials."""
+        if self.is_service_blocked():
+            logger.warning(
+                "Skipping automatic reauthentication while service-blocked backoff is active"
+            )
+            return False
+
+        now = time.monotonic()
+        wait_for = self._last_reauth_attempt_monotonic + self._reauth_backoff_seconds() - now
+        if wait_for > 0:
+            logger.warning(
+                "Reauthentication backoff: waiting %.1f seconds before retry",
+                wait_for,
+            )
+            await asyncio.sleep(wait_for)
+
         try:
-            logger.warning("Attempting automatic reauthentication with stored credentials...")
-            
-            # Import here to avoid circular imports
+            logger.warning(
+                "Attempting automatic reauthentication with stored credentials..."
+            )
+
             from .dependency_injection.providers import (
                 setup_dependencies,
                 get_auth_use_case,
                 clear_dependencies,
             )
-            
-            # Setup dependencies
+
             setup_dependencies()
-            
+
             try:
-                # Get auth use case and perform login
                 auth_use_case = get_auth_use_case()
-                
-                # Perform login with stored credentials
+                self._last_reauth_attempt_monotonic = time.monotonic()
                 auth_result = await auth_use_case.login(self.username, self.password)
 
                 if auth_result.success:
-                    # Update credentials with new tokens
                     self.update_credentials(
                         self.username,
                         self.password,
                         auth_result.hash,
-                        auth_result.refresh_token
+                        auth_result.refresh_token,
+                        persist=False,
                     )
+                    await self.async_persist_session_to_disk()
+                    self.clear_service_blocked()
                     logger.warning("Automatic reauthentication successful")
                     return True
-                else:
-                    logger.warning(f"Automatic reauthentication failed: {auth_result.message}")
-                    return False
+
+                self._reauth_failures += 1
+                logger.warning(
+                    "Automatic reauthentication failed: %s", auth_result.message
+                )
+                return False
 
             finally:
-                # Clean up dependencies
                 clear_dependencies()
 
         except Exception as e:
-            logger.warning(f"Automatic reauthentication failed: {e}")
+            self._reauth_failures += 1
+            logger.warning("Automatic reauthentication failed: %s", e)
             return False
 
-    def update_credentials(self, username: str, password: str, hash_token: str, refresh_token: str = None) -> None:
-        """Update credentials after successful authentication."""
+    def update_credentials(
+        self,
+        username: str,
+        password: str,
+        hash_token: str,
+        refresh_token: str | None = None,
+        *,
+        persist: bool = True,
+    ) -> None:
+        """Update credentials after successful authentication.
+
+        Args:
+            persist: If True, write session file synchronously (CLI).
+                If False, caller must await async_persist_session_to_disk() (Home Assistant).
+        """
         self.username = username
         self.password = password
         self.hash_token = hash_token
         self.refresh_token = refresh_token
         self.session_timestamp = time.time()
         self._is_authenticated = True
-        
-        # Save session
-        self._save_session()
-        logger.warning("Credentials updated and session saved")
 
-    def clear_credentials(self) -> None:
+        if persist:
+            self._save_session_sync()
+        logger.warning("Credentials updated%s", "" if persist else " (persist deferred)")
+
+    async def async_update_credentials(
+        self,
+        username: str,
+        password: str,
+        hash_token: str,
+        refresh_token: str | None = None,
+    ) -> None:
+        """Update credentials and persist to disk without blocking the event loop."""
+        self.update_credentials(
+            username, password, hash_token, refresh_token, persist=False
+        )
+        await self.async_persist_session_to_disk()
+
+    def clear_credentials(self, *, persist: bool = True) -> None:
         """Clear all credentials and session data."""
         self._is_authenticated = False
         self.current_installation = None
@@ -190,10 +304,15 @@ class SessionManager:
         self.hash_token = None
         self.refresh_token = None
         self.session_timestamp = None
-        
-        # Clear session file
-        self._clear_session_file()
-        logger.warning("Session cleared and cleaned")
+
+        if persist:
+            self._clear_session_file_sync()
+        logger.warning("Session cleared and cleaned%s", "" if persist else " (file clear deferred)")
+
+    async def async_clear_credentials(self) -> None:
+        """Clear credentials and remove session file without blocking the event loop."""
+        self.clear_credentials(persist=False)
+        await self.async_clear_session_file()
 
     def get_current_hash_token(self) -> Optional[str]:
         """Get current hash token."""
@@ -203,71 +322,76 @@ class SessionManager:
         """Get current session data."""
         if self.hash_token and self.username:
             return {
-                'user': self.username,
-                'lang': 'ES',
-                'legals': True,
-                'changePassword': False,
-                'needDeviceAuthorization': None,
-                'login_time': self.session_timestamp or time.time(),
+                "user": self.username,
+                "lang": "ES",
+                "legals": True,
+                "changePassword": False,
+                "needDeviceAuthorization": None,
+                "login_time": self.session_timestamp or time.time(),
             }
         return None
 
     def get_current_cookies(self) -> Optional[Dict[str, str]]:
         """Get current cookies."""
-        # For now, return empty dict - cookies are handled by clients
         return {}
 
     def is_session_valid(self) -> bool:
         """Check if current session is valid."""
         if not self.hash_token or not self.session_timestamp:
             return False
-        
-        # Check if session is not too old (6 minutes)
+
         current_time = time.time()
         session_age = current_time - self.session_timestamp
-        
+
         if session_age > 360:  # 6 minutes
-            logger.warning(f"Session expired by time (age: {session_age:.1f} seconds)")
+            logger.warning(
+                "Session expired by time (age: %.1f seconds)", session_age
+            )
             return False
-        
-        # Also check if JWT token has expired
+
         try:
             if is_jwt_expired(self.hash_token):
                 logger.warning("hash_token (JWT) has expired")
                 return False
         except Exception as e:
-            logger.warning(f"Error checking JWT expiration: {e}")
-            # If we can't check JWT expiration, fall back to time-based check
-            pass
-        
-        logger.debug(f"Session appears valid (age: {session_age:.1f} seconds)")
+            logger.warning("Error checking JWT expiration: %s", e)
+
+        logger.debug("Session appears valid (age: %.1f seconds)", session_age)
         return True
 
     async def ensure_authenticated(self, interactive: bool = True) -> bool:
         """Check if we have valid credentials."""
-        # Check if we already have valid credentials
+        if not self._session_disk_hydrated:
+            await self.async_load_session_from_disk()
+
         if self.is_session_valid():
             logger.warning("Valid session found, no authentication needed")
             return True
-        
-        # If we don't have valid credentials, we need to authenticate
-        logger.warning("No valid session found, authentication required. Clearing detailed installation cache.")
+
+        logger.warning(
+            "No valid session found, authentication required. Clearing detailed installation cache."
+        )
 
         from .file_manager import get_file_manager
-        get_file_manager().delete_files_by_prefix("detailed_installation_")
-        
-        # If we don't have credentials, we need to get them
+
+        await get_file_manager().async_delete_files_by_prefix("detailed_installation_")
+
         if not self.username or not self.password:
             if interactive:
-                # Get credentials interactively
                 self.username, self.password = self._get_user_credentials()
-                return True  # We have credentials now, let the use case handle the login
-            else:
-                logger.error("No credentials available and non-interactive mode")
-                return False
-        
-        # We have credentials but session is expired, try automatic reauthentication
-        logger.warning("Session expired but credentials available, attempting automatic reauthentication...")
+                return True
+            logger.error("No credentials available and non-interactive mode")
+            return False
+
+        if self.is_service_blocked():
+            logger.warning(
+                "Skipping automatic reauthentication while service-blocked backoff is active"
+            )
+            return False
+
+        logger.warning(
+            "Session expired but credentials available, attempting automatic reauthentication..."
+        )
         return await self._try_automatic_reauthentication()
 
     def _get_user_credentials(self) -> tuple[str, str]:
@@ -277,26 +401,25 @@ class SessionManager:
         print("============================================================")
         print("👤 Ingresa tus credenciales de My Verisure:")
         print()
-        
+
         try:
             username = input("📋 User ID (DNI/NIE): ").strip()
             password = input("🔐 Contraseña: ").strip()
             return username, password
-        except EOFError:
-            raise RuntimeError("No se pueden obtener credenciales en modo no interactivo")
+        except EOFError as e:
+            raise RuntimeError(
+                "No se pueden obtener credenciales en modo no interactivo"
+            ) from e
 
     async def logout(self) -> None:
         """Logout and clear session."""
         logger.warning("Logging out and clearing session")
-        self.clear_credentials()
-        self._clear_session_file()
+        await self.async_clear_credentials()
         logger.warning("Logout completed")
 
     async def cleanup(self) -> None:
         """Clean up resources."""
-        # This method will be implemented by the CLI's session manager
-        # For now, just clear credentials
-        self.clear_credentials()
+        await self.async_clear_credentials()
 
 
 def get_session_manager() -> SessionManager:

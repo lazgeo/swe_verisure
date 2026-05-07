@@ -23,6 +23,8 @@ from .graphql_alarm_queries import (
 
 _LOGGER = logging.getLogger(__name__)
 
+_alarm_status_json_cache: Dict[str, Any] | None = None
+
 
 class AlarmClient(BaseClient):
     """Alarm client for My Verisure API."""
@@ -32,39 +34,37 @@ class AlarmClient(BaseClient):
         super().__init__()
 
     async def _load_alarm_status_config(self) -> Dict[str, Any]:
-        """Load alarm status configuration from JSON file."""
+        """Load alarm status configuration from JSON file (cached, non-blocking)."""
+        global _alarm_status_json_cache
+
+        if _alarm_status_json_cache is not None:
+            return _alarm_status_json_cache
+
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        config_path = os.path.join(current_dir, "alarm_status.json")
+
         try:
-            # Get the directory where this file is located and go up one level
-            # to the my_verisure directory
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            config_path = os.path.join(current_dir, "alarm_status.json")
-
-            # Use asyncio to run file operations in thread pool
-            import asyncio
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # If we're in an async context, run in thread pool
-                config = await loop.run_in_executor(None, self._read_alarm_status_file, config_path)
-            else:
-                # If not in async context, read directly
-                config = self._read_alarm_status_file(config_path)
-
+            _alarm_status_json_cache = await asyncio.to_thread(
+                self._read_alarm_status_file, config_path
+            )
             _LOGGER.debug(
                 "Alarm status configuration loaded from %s", config_path
             )
-            return config
-
-        except Exception as e:
+            return _alarm_status_json_cache
+        except OSError as e:
             _LOGGER.error("Failed to load alarm status configuration: %s", e)
-            # Return default empty structure
-            return {
-                "internal": {
-                    "day": {"alarm": []},
-                    "night": {"alarm": []},
-                    "total": {"alarm": []},
-                },
-                "external": {"alarm": []},
-            }
+        except json.JSONDecodeError as e:
+            _LOGGER.error("Invalid alarm status JSON: %s", e)
+
+        _alarm_status_json_cache = {
+            "internal": {
+                "day": {"alarm": []},
+                "night": {"alarm": []},
+                "total": {"alarm": []},
+            },
+            "external": {"alarm": []},
+        }
+        return _alarm_status_json_cache
 
     def _read_alarm_status_file(self, config_path: str) -> Dict[str, Any]:
         """Read alarm status configuration file (blocking operation)."""

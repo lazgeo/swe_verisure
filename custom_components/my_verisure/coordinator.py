@@ -74,12 +74,13 @@ class MyVerisureDataUpdateCoordinator(DataUpdateCoordinator):
         # Reference to alarm control panel for state updates
         self._alarm_control_panel = None
         
-        # Set credentials in session manager
+        # Set credentials in session manager (memory only; persist after login)
         self.session_manager.update_credentials(
             entry.data[CONF_USER],
             entry.data[CONF_PASSWORD],
-            "",  # hash_token will be set after login
-            ""   # refresh_token will be set after login
+            "",
+            "",
+            persist=False,
         )
         
         # Store session file path for later loading
@@ -109,6 +110,12 @@ class MyVerisureDataUpdateCoordinator(DataUpdateCoordinator):
     async def async_login(self) -> bool:
         """Login to My Verisure."""
         try:
+            if self.session_manager.is_service_blocked():
+                LOGGER.warning(
+                    "Login skipped: service temporarily blocked (cooldown active)"
+                )
+                return False
+
             # Check if we have a valid session that is still valid locally
             if self.session_manager.is_authenticated:
                 if self.session_manager.is_session_valid():
@@ -173,13 +180,13 @@ class MyVerisureDataUpdateCoordinator(DataUpdateCoordinator):
             auth_result = await self.auth_use_case.login(username, password)
             
             if auth_result.success:
-                # Update session manager with new credentials
-                self.session_manager.update_credentials(
+                await self.session_manager.async_update_credentials(
                     self.session_manager.username,
                     self.session_manager.password,
                     auth_result.hash,
-                    auth_result.refresh_token
+                    auth_result.refresh_token,
                 )
+                self.session_manager.clear_service_blocked()
                 LOGGER.warning("New login successful and session saved")
                 return True
             else:
@@ -206,6 +213,66 @@ class MyVerisureDataUpdateCoordinator(DataUpdateCoordinator):
             LOGGER.error("New login failed: %s", e)
             return False
 
+    def _panel_capabilities_from_stored_data(
+        self,
+    ) -> tuple[str | None, str | None]:
+        """Extract panel and capabilities from last coordinator payload if present."""
+        payload = self.data or {}
+        detailed = payload.get("detailed_installation")
+        if not detailed or not isinstance(detailed, dict):
+            return None, None
+        inst = detailed.get("installation")
+        if not isinstance(inst, dict):
+            return None, None
+        panel = inst.get("panel") or None
+        caps = inst.get("capabilities") or None
+        return panel, caps
+
+    async def _async_refresh_alarm_only(self) -> Dict[str, Any]:
+        """Refresh alarm status and merge into existing coordinator data."""
+        if not await self.async_login():
+            raise UpdateFailed("Failed to login to My Verisure")
+
+        panel, caps = self._panel_capabilities_from_stored_data()
+        if not panel or not caps:
+            return await self._async_update_data()
+
+        LOGGER.warning(
+            "Refreshing alarm status only for installation %s", self.installation_id
+        )
+        alarm_status = await self.alarm_use_case.get_alarm_status(
+            self.installation_id,
+            panel=panel,
+            capabilities=caps,
+        )
+        detailed_installation = (self.data or {}).get("detailed_installation")
+        if not detailed_installation:
+            return await self._async_update_data()
+
+        result = {
+            "last_updated": time.time(),
+            "installation_id": self.installation_id,
+            "alarm_status": alarm_status.dict(),
+            "detailed_installation": detailed_installation,
+        }
+        try:
+            self.async_set_updated_data(result)
+            save_success = await self.file_manager.async_save_json(
+                COORDINATOR_DATA_FILE,
+                result,
+            )
+            if not save_success:
+                LOGGER.error(
+                    "Failed to save coordinator data to %s", COORDINATOR_DATA_FILE
+                )
+        except Exception as save_err:
+            LOGGER.error(
+                "Error saving coordinator data to %s: %s",
+                COORDINATOR_DATA_FILE,
+                save_err,
+            )
+        return result
+
     async def _async_update_data(self) -> Dict[str, Any]:
         """Update data via My Verisure API."""
         try:
@@ -214,10 +281,21 @@ class MyVerisureDataUpdateCoordinator(DataUpdateCoordinator):
                 raise UpdateFailed("Failed to login to My Verisure")
 
             LOGGER.warning("Updating data for installation %s", self.installation_id)
-            alarm_status = await self.alarm_use_case.get_alarm_status(self.installation_id)
-            LOGGER.warning("Alarm status: %s", alarm_status.dict())
-            detailed_installation = await self.installation_use_case.get_installation_services(self.installation_id)
+            detailed_installation = await self.installation_use_case.get_installation_services(
+                self.installation_id
+            )
             LOGGER.warning("Detailed installation: %s", detailed_installation.dict())
+            panel = detailed_installation.installation.panel or "PROTOCOL"
+            capabilities = (
+                detailed_installation.installation.capabilities
+                or "default_capabilities"
+            )
+            alarm_status = await self.alarm_use_case.get_alarm_status(
+                self.installation_id,
+                panel=panel,
+                capabilities=capabilities,
+            )
+            LOGGER.warning("Alarm status: %s", alarm_status.dict())
             
             result = {
                 "last_updated": time.time(),
@@ -229,15 +307,21 @@ class MyVerisureDataUpdateCoordinator(DataUpdateCoordinator):
             try:
                 self.async_set_updated_data(result)
                 try:
-                    save_success = await self.hass.async_add_executor_job(
-                        self.file_manager.save_json,
+                    save_success = await self.file_manager.async_save_json(
                         COORDINATOR_DATA_FILE,
                         result,
                     )
                     if not save_success:
-                        LOGGER.error("Failed to save coordinator data to %s", COORDINATOR_DATA_FILE)
+                        LOGGER.error(
+                            "Failed to save coordinator data to %s",
+                            COORDINATOR_DATA_FILE,
+                        )
                 except Exception as save_err:
-                    LOGGER.error("Error saving coordinator data to %s: %s", COORDINATOR_DATA_FILE, save_err)
+                    LOGGER.error(
+                        "Error saving coordinator data to %s: %s",
+                        COORDINATOR_DATA_FILE,
+                        save_err,
+                    )
 
                 await self.create_dummy_camera_images_use_case.create_dummy_camera_images(
                     installation_id=self.installation_id,
@@ -309,11 +393,17 @@ class MyVerisureDataUpdateCoordinator(DataUpdateCoordinator):
                 CONF_AUTO_ARM_PERIMETER_WITH_INTERNAL,
                 self.config_entry.data.get(CONF_AUTO_ARM_PERIMETER_WITH_INTERNAL, False)
             )
-            result = await self.alarm_use_case.arm_away(self.installation_id, auto_arm_perimeter_with_internal)
+            panel, caps = self._panel_capabilities_from_stored_data()
+            result = await self.alarm_use_case.arm_away(
+                self.installation_id,
+                auto_arm_perimeter_with_internal,
+                panel=panel,
+                capabilities=caps,
+            )
             
             # Check if operation was successful and send notification
             if result.success:
-                await self._async_update_data()
+                await self._async_refresh_alarm_only()
                 title = await self.get_translation("notifications.title.success")
                 message = await self.get_translation("notifications.alarm.arm_away.success")
                 async_create(
@@ -349,11 +439,16 @@ class MyVerisureDataUpdateCoordinator(DataUpdateCoordinator):
     async def async_arm_home(self) -> ArmResult:
         """Arm the alarm in home mode."""
         try:
-            result = await self.alarm_use_case.arm_home(self.installation_id)
+            panel, caps = self._panel_capabilities_from_stored_data()
+            result = await self.alarm_use_case.arm_home(
+                self.installation_id,
+                panel=panel,
+                capabilities=caps,
+            )
             
             # Check if operation was successful and send notification
             if result.success:
-                await self._async_update_data()
+                await self._async_refresh_alarm_only()
                 title = await self.get_translation("notifications.title.success")
                 message = await self.get_translation("notifications.alarm.arm_home.success")
                 async_create(
@@ -393,11 +488,17 @@ class MyVerisureDataUpdateCoordinator(DataUpdateCoordinator):
                 CONF_AUTO_ARM_PERIMETER_WITH_INTERNAL,
                 self.config_entry.data.get(CONF_AUTO_ARM_PERIMETER_WITH_INTERNAL, False)
             )
-            result = await self.alarm_use_case.arm_night(self.installation_id, auto_arm_perimeter_with_internal)
+            panel, caps = self._panel_capabilities_from_stored_data()
+            result = await self.alarm_use_case.arm_night(
+                self.installation_id,
+                auto_arm_perimeter_with_internal,
+                panel=panel,
+                capabilities=caps,
+            )
             
             # Check if operation was successful and send notification
             if result.success:
-                await self._async_update_data()
+                await self._async_refresh_alarm_only()
                 title = await self.get_translation("notifications.title.success")
                 message = await self.get_translation("notifications.alarm.arm_night.success")
                 async_create(
@@ -433,11 +534,16 @@ class MyVerisureDataUpdateCoordinator(DataUpdateCoordinator):
     async def async_disarm(self) -> DisarmResult:
         """Disarm the alarm."""
         try:
-            result = await self.alarm_use_case.disarm(self.installation_id)
+            panel, caps = self._panel_capabilities_from_stored_data()
+            result = await self.alarm_use_case.disarm(
+                self.installation_id,
+                panel=panel,
+                capabilities=caps,
+            )
             
             # Check if operation was successful and send notification
             if result.success:
-                await self._async_update_data()
+                await self._async_refresh_alarm_only()
                 title = await self.get_translation("notifications.title.success")
                 message = await self.get_translation("notifications.alarm.disarm.success")
                 async_create(
@@ -557,8 +663,7 @@ class MyVerisureDataUpdateCoordinator(DataUpdateCoordinator):
     async def async_load_session(self) -> bool:
         """Load session data asynchronously."""
         try:
-            # SessionManager automatically loads session on initialization
-            # Just check if we have valid credentials
+            await self.session_manager.async_load_session_from_disk()
             return self.session_manager.is_authenticated
         except Exception as e:
             LOGGER.error("Error loading session: %s", e)

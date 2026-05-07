@@ -95,7 +95,7 @@ class AuthClient(BaseClient):
     async def login(self, user: str, password: str) -> AuthDTO:
         """Login to My Verisure API (Native App Simulation)."""
         # Ensure device identifiers are loaded or generated
-        self._device_manager.ensure_device_identifiers()
+        await self._device_manager.async_ensure_device_identifiers()
 
         # Generate unique ID for this session
         session_id = f"OWI______________________"
@@ -169,12 +169,13 @@ class AuthClient(BaseClient):
                 _LOGGER.warning("  - SessionManager instance ID: %s", id(session_manager))
                 _LOGGER.warning("  - Username: %s", user)
                 _LOGGER.warning("  - Hash token: %s", self._hash[:50] + "..." if self._hash else "None")
-                session_manager.update_credentials(
+                await session_manager.async_update_credentials(
                     user,
                     password,
                     self._hash,
-                    self._refresh_token
+                    self._refresh_token,
                 )
+                session_manager.clear_service_blocked()
                 _LOGGER.warning("SessionManager updated with new credentials")
 
                 # Convert to DTO
@@ -222,7 +223,7 @@ class AuthClient(BaseClient):
     async def _check_device_authorization(self) -> AuthDTO:
         """Check if device is already authorized without requiring OTP."""
         # Ensure device identifiers are loaded or generated
-        self._device_manager.ensure_device_identifiers()
+        await self._device_manager.async_ensure_device_identifiers()
 
         # Prepare variables for device validation
         variables = self._device_manager.get_validation_variables()
@@ -273,7 +274,7 @@ class AuthClient(BaseClient):
     async def _complete_device_authorization(self) -> AuthDTO:
         """Complete device authorization process with OTP."""
         # Ensure device identifiers are loaded or generated
-        self._device_manager.ensure_device_identifiers()
+        await self._device_manager.async_ensure_device_identifiers()
 
         # Prepare variables for device validation
         variables = self._device_manager.get_validation_variables()
@@ -581,7 +582,7 @@ class AuthClient(BaseClient):
     async def _perform_post_otp_login(self) -> AuthDTO:
         """Perform a new login after OTP verification to get updated tokens."""
         # Ensure device identifiers are loaded or generated
-        self._device_manager.ensure_device_identifiers()
+        await self._device_manager.async_ensure_device_identifiers()
 
         # Generate unique ID for this session
         session_id = f"OWI______________________"
@@ -656,12 +657,13 @@ class AuthClient(BaseClient):
 
                 # Update SessionManager with new credentials
                 session_manager = get_session_manager()
-                session_manager.update_credentials(
+                await session_manager.async_update_credentials(
                     user,
                     password,
                     self._hash,
-                    self._refresh_token
+                    self._refresh_token,
                 )
+                session_manager.clear_service_blocked()
                 _LOGGER.warning("SessionManager updated with new credentials")
 
                 _LOGGER.warning("Post-OTP login successful!")

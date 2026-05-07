@@ -1,17 +1,22 @@
 """Device manager for My Verisure API."""
 
+from __future__ import annotations
+
+import asyncio
 import hashlib
 import logging
 import os
 import platform
 import random
 import time
-import uuid
 from typing import Dict, Optional
 
 from ..file_manager import get_file_manager
 
 _LOGGER = logging.getLogger(__name__)
+
+# platform.platform() can trigger blocking reads; cache after first resolution
+_cached_platform_string: str | None = None
 
 
 class DeviceManager:
@@ -23,6 +28,14 @@ class DeviceManager:
         self._file_manager = get_file_manager()
 
 
+    @staticmethod
+    def _platform_string_for_identifiers() -> str:
+        """Return platform string for seeding (uses cached value when available)."""
+        global _cached_platform_string
+        if _cached_platform_string is None:
+            _cached_platform_string = platform.platform()
+        return _cached_platform_string
+
     def _generate_device_identifiers(self) -> Dict[str, str]:
         """Generate device identifiers with improved randomness."""
         # Get system information for seeding
@@ -31,7 +44,7 @@ class DeviceManager:
             "machine": platform.machine(),
             "processor": platform.processor(),
             "node": platform.node(),
-            "platform": platform.platform(),
+            "platform": self._platform_string_for_identifiers(),
             "python_version": platform.python_version(),
         }
         
@@ -116,7 +129,7 @@ class DeviceManager:
         }
 
     def _load_device_identifiers(self) -> bool:
-        """Load device identifiers from file."""
+        """Load device identifiers from file (blocking I/O)."""
         try:
             device_data = self._file_manager.load_device_identifiers()
             if device_data:
@@ -127,24 +140,45 @@ class DeviceManager:
                     self._device_identifiers.get("uuid", "Unknown"),
                 )
                 return True
-            else:
-                _LOGGER.warning(
-                    "No device identifiers file found, will generate new ones"
-                )
-                return False
+            _LOGGER.warning(
+                "No device identifiers file found, will generate new ones"
+            )
+            return False
 
         except Exception as e:
             _LOGGER.error("Failed to load device identifiers: %s", e)
             return False
 
+    async def _async_load_device_identifiers(self) -> bool:
+        """Load device identifiers without blocking the event loop."""
+        try:
+            device_data = await self._file_manager.async_load_device_identifiers()
+            if device_data:
+                self._device_identifiers = device_data
+                _LOGGER.warning("Device identifiers loaded from device_identifiers.json")
+                _LOGGER.warning(
+                    "Device UUID: %s",
+                    self._device_identifiers.get("uuid", "Unknown"),
+                )
+                return True
+            _LOGGER.warning(
+                "No device identifiers file found, will generate new ones"
+            )
+            return False
+        except Exception as e:
+            _LOGGER.error("Failed to load device identifiers: %s", e)
+            return False
+
     def _save_device_identifiers(self) -> None:
-        """Save device identifiers to file."""
+        """Save device identifiers to file (blocking I/O)."""
         if not self._device_identifiers:
             _LOGGER.warning("No device identifiers to save")
             return
 
         try:
-            success = self._file_manager.save_device_identifiers(self._device_identifiers)
+            success = self._file_manager.save_device_identifiers(
+                self._device_identifiers
+            )
             if success:
                 _LOGGER.warning("Device identifiers saved to device_identifiers.json")
             else:
@@ -153,16 +187,43 @@ class DeviceManager:
         except Exception as e:
             _LOGGER.error("Failed to save device identifiers: %s", e)
 
+    async def _async_save_device_identifiers(self) -> None:
+        """Save device identifiers without blocking the event loop."""
+        if not self._device_identifiers:
+            _LOGGER.warning("No device identifiers to save")
+            return
+        try:
+            success = await self._file_manager.async_save_device_identifiers(
+                self._device_identifiers
+            )
+            if success:
+                _LOGGER.warning("Device identifiers saved to device_identifiers.json")
+            else:
+                _LOGGER.error("Failed to save device identifiers to JSON file")
+        except Exception as e:
+            _LOGGER.error("Failed to save device identifiers: %s", e)
 
     def ensure_device_identifiers(self) -> None:
-        """Ensure device identifiers are loaded or generated."""
+        """Ensure device identifiers are loaded or generated (blocking I/O)."""
         if self._device_identifiers is None:
-            # Try to load existing identifiers
             if not self._load_device_identifiers():
-                # Generate new identifiers
                 _LOGGER.warning("Generating new device identifiers")
                 self._device_identifiers = self._generate_device_identifiers()
                 self._save_device_identifiers()
+
+    async def async_ensure_device_identifiers(self) -> None:
+        """Ensure device identifiers are loaded or generated without blocking."""
+        global _cached_platform_string
+        if _cached_platform_string is None:
+            _cached_platform_string = await asyncio.to_thread(platform.platform)
+
+        if self._device_identifiers is None:
+            if not await self._async_load_device_identifiers():
+                _LOGGER.warning("Generating new device identifiers")
+                self._device_identifiers = await asyncio.to_thread(
+                    self._generate_device_identifiers
+                )
+                await self._async_save_device_identifiers()
 
     def get_device_info(self) -> Dict[str, str]:
         """Get current device identifiers information."""

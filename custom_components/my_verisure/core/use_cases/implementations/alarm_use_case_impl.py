@@ -29,11 +29,13 @@ class AlarmUseCaseImpl(AlarmUseCase):
     ) -> tuple[str, str]:
         """Get panel and capabilities for an installation."""
         try:
-            services_data = await self.installation_repository.get_installation_services(installation_id)
-            panel = services_data.installation.panel or "PROTOCOL"  # Fallback to default
+            services_data = await self.installation_repository.get_installation_services(
+                installation_id
+            )
+            panel = services_data.installation.panel or "PROTOCOL"
             capabilities = (
                 services_data.installation.capabilities or "default_capabilities"
-            )  # Fallback to default
+            )
 
             return panel, capabilities
 
@@ -45,26 +47,53 @@ class AlarmUseCaseImpl(AlarmUseCase):
             )
             return "PROTOCOL", "default_capabilities"
 
-    async def get_alarm_status(self, installation_id: str) -> AlarmStatus:
+    async def _resolve_panel_capabilities(
+        self,
+        installation_id: str,
+        panel: str | None,
+        capabilities: str | None,
+    ) -> tuple[str, str]:
+        if panel is not None and capabilities is not None:
+            return panel, capabilities
+        return await self._get_installation_info(installation_id)
+
+    async def get_alarm_status(
+        self,
+        installation_id: str,
+        *,
+        panel: str | None = None,
+        capabilities: str | None = None,
+    ) -> AlarmStatus:
         """Get alarm status."""
         try:
-            panel, capabilities = await self._get_installation_info(installation_id)
-            return await self.alarm_repository.get_alarm_status(
+            panel_resolved, caps_resolved = await self._resolve_panel_capabilities(
                 installation_id, panel, capabilities
+            )
+            return await self.alarm_repository.get_alarm_status(
+                installation_id, panel_resolved, caps_resolved
             )
 
         except Exception as e:
             _LOGGER.error("Error getting alarm status: %s", e)
             raise
 
-    async def arm_away(self, installation_id: str, auto_arm_perimeter_with_internal: bool = False) -> ArmResult:
+    async def arm_away(
+        self,
+        installation_id: str,
+        auto_arm_perimeter_with_internal: bool = False,
+        *,
+        panel: str | None = None,
+        capabilities: str | None = None,
+    ) -> ArmResult:
         """Arm the alarm in away mode."""
         try:
-            panel, capabilities = await self._get_installation_info(installation_id)
+            panel_resolved, caps_resolved = await self._resolve_panel_capabilities(
+                installation_id, panel, capabilities
+            )
             result = await self.alarm_repository.arm_away(
                 installation_id=installation_id,
-                panel=panel,
-                capabilities=capabilities,
+                panel=panel_resolved,
+                capabilities=caps_resolved,
                 auto_arm_perimeter_with_internal=auto_arm_perimeter_with_internal,
             )
 
@@ -81,14 +110,22 @@ class AlarmUseCaseImpl(AlarmUseCase):
             _LOGGER.error("Error arming alarm in away mode: %s", e)
             raise
 
-    async def arm_home(self, installation_id: str) -> ArmResult:
+    async def arm_home(
+        self,
+        installation_id: str,
+        *,
+        panel: str | None = None,
+        capabilities: str | None = None,
+    ) -> ArmResult:
         """Arm the alarm in home mode."""
         try:
-            panel, capabilities = await self._get_installation_info(installation_id)
+            panel_resolved, caps_resolved = await self._resolve_panel_capabilities(
+                installation_id, panel, capabilities
+            )
             result = await self.alarm_repository.arm_home(
                 installation_id=installation_id,
-                panel=panel,
-                capabilities=capabilities,
+                panel=panel_resolved,
+                capabilities=caps_resolved,
             )
 
             if result.success:
@@ -104,14 +141,23 @@ class AlarmUseCaseImpl(AlarmUseCase):
             _LOGGER.error("Error arming alarm in home mode: %s", e)
             raise
 
-    async def arm_night(self, installation_id: str, auto_arm_perimeter_with_internal: bool = False) -> ArmResult:
+    async def arm_night(
+        self,
+        installation_id: str,
+        auto_arm_perimeter_with_internal: bool = False,
+        *,
+        panel: str | None = None,
+        capabilities: str | None = None,
+    ) -> ArmResult:
         """Arm the alarm in night mode."""
         try:
-            panel, capabilities = await self._get_installation_info(installation_id)
+            panel_resolved, caps_resolved = await self._resolve_panel_capabilities(
+                installation_id, panel, capabilities
+            )
             result = await self.alarm_repository.arm_night(
                 installation_id=installation_id,
-                panel=panel,
-                capabilities=capabilities,
+                panel=panel_resolved,
+                capabilities=caps_resolved,
                 auto_arm_perimeter_with_internal=auto_arm_perimeter_with_internal,
             )
 
@@ -128,12 +174,20 @@ class AlarmUseCaseImpl(AlarmUseCase):
             _LOGGER.error("Error arming alarm in night mode: %s", e)
             raise
 
-    async def disarm(self, installation_id: str) -> DisarmResult:
+    async def disarm(
+        self,
+        installation_id: str,
+        *,
+        panel: str | None = None,
+        capabilities: str | None = None,
+    ) -> DisarmResult:
         """Disarm the alarm."""
         try:
-            panel, capabilities = await self._get_installation_info(installation_id)
-            result = await self.alarm_repository.disarm_panel(
+            panel_resolved, caps_resolved = await self._resolve_panel_capabilities(
                 installation_id, panel, capabilities
+            )
+            result = await self.alarm_repository.disarm_panel(
+                installation_id, panel_resolved, caps_resolved
             )
 
             if result.success:

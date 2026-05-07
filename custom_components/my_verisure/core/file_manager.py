@@ -1,12 +1,22 @@
 """File manager for My Verisure integration."""
 
+from __future__ import annotations
+
+import asyncio
 import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Callable, Dict, Optional, TypeVar, Union
 
 _LOGGER = logging.getLogger(__name__)
+
+T = TypeVar("T")
+
+
+async def _to_thread(func: Callable[..., T], /, *args: Any, **kwargs: Any) -> T:
+    """Run a blocking callable in the default executor (non-blocking for the event loop)."""
+    return await asyncio.to_thread(func, *args, **kwargs)
 
 
 class FileManager:
@@ -64,7 +74,7 @@ class FileManager:
         return self._data_dir
     
     def save_text(self, filename: str, content: str) -> bool:
-        """Save text content to a file."""
+        """Save text content to a file (blocking I/O; prefer async_save_text from async code)."""
         try:
             file_path = self._data_dir / filename
             with open(file_path, 'w', encoding='utf-8') as f:
@@ -76,7 +86,7 @@ class FileManager:
             return False
     
     def load_text(self, filename: str) -> Optional[str]:
-        """Load text content from a file."""
+        """Load text content from a file (blocking I/O; prefer async_load_text from async code)."""
         try:
             file_path = self._data_dir / filename
             if not file_path.exists():
@@ -92,7 +102,7 @@ class FileManager:
             return None
     
     def save_json(self, filename: str, data: Union[Dict[str, Any], list]) -> bool:
-        """Save JSON data to a file."""
+        """Save JSON data to a file (blocking I/O; prefer async_save_json from async code)."""
         try:
             file_path = self._data_dir / filename
             with open(file_path, 'w', encoding='utf-8') as f:
@@ -104,7 +114,7 @@ class FileManager:
             return False
     
     def load_json(self, filename: str) -> Optional[Union[Dict[str, Any], list]]:
-        """Load JSON data from a file."""
+        """Load JSON data from a file (blocking I/O; prefer async_load_json from async code)."""
         try:
             file_path = self._data_dir / filename
             if not file_path.exists():
@@ -125,7 +135,7 @@ class FileManager:
         return file_path.exists()
     
     def delete_file(self, filename: str) -> bool:
-        """Delete a file."""
+        """Delete a file (blocking I/O; prefer async_delete_file from async code)."""
         try:
             file_path = self._data_dir / filename
             if file_path.exists():
@@ -140,7 +150,7 @@ class FileManager:
             return False
     
     def delete_files_by_prefix(self, prefix: str) -> int:
-        """Delete all files that start with the given prefix."""
+        """Delete all files that start with the given prefix (blocking I/O; prefer async_delete_files_by_prefix)."""
         deleted_count = 0
         try:
             if not self._data_dir.exists():
@@ -169,7 +179,7 @@ class FileManager:
             return deleted_count
     
     def save_binary(self, filepath: str, content: bytes) -> bool:
-        """Save binary content to a file."""
+        """Save binary content to a file (blocking I/O; prefer async_save_binary from async code)."""
         try:
             # Create full path including subdirectories
             full_path = self._data_dir / filepath
@@ -196,7 +206,7 @@ class FileManager:
             return False
     
     def list_files(self, pattern: str = "*") -> list[str]:
-        """List files in the data directory matching a pattern."""
+        """List files in the data directory matching a pattern (blocking I/O; prefer async_list_files)."""
         try:
             files = []
             for file_path in self._data_dir.glob(pattern):
@@ -213,7 +223,7 @@ class FileManager:
         return self._data_dir / filename
     
     def get_file_size(self, filename: str) -> Optional[int]:
-        """Get the size of a file in bytes."""
+        """Get the size of a file in bytes (blocking I/O; prefer async_get_file_size from async code)."""
         try:
             file_path = self._data_dir / filename
             if file_path.exists():
@@ -224,7 +234,7 @@ class FileManager:
             return None
 
     def save_device_identifiers(self, data: Dict[str, Any]) -> bool:
-        """Save device identifiers to the execution directory."""
+        """Save device identifiers to the execution directory (blocking I/O; prefer async_save_device_identifiers)."""
         try:
             # Save to the execution directory (not in /data)
             file_path = Path.cwd() / "device_identifiers.json"
@@ -237,7 +247,7 @@ class FileManager:
             return False
 
     def load_device_identifiers(self) -> Optional[Dict[str, Any]]:
-        """Load device identifiers from the execution directory."""
+        """Load device identifiers from the execution directory (blocking I/O; prefer async_load_device_identifiers)."""
         try:
             # Load from the execution directory (not from /data)
             file_path = Path.cwd() / "device_identifiers.json"
@@ -257,6 +267,58 @@ class FileManager:
         """Check if device identifiers file exists in the execution directory."""
         file_path = Path.cwd() / "device_identifiers.json"
         return file_path.exists()
+
+    async def async_save_text(self, filename: str, content: str) -> bool:
+        """Save text content to a file without blocking the event loop."""
+        return await _to_thread(self.save_text, filename, content)
+
+    async def async_load_text(self, filename: str) -> Optional[str]:
+        """Load text content from a file without blocking the event loop."""
+        return await _to_thread(self.load_text, filename)
+
+    async def async_save_json(
+        self, filename: str, data: Union[Dict[str, Any], list]
+    ) -> bool:
+        """Save JSON data to a file without blocking the event loop."""
+        return await _to_thread(self.save_json, filename, data)
+
+    async def async_load_json(
+        self, filename: str
+    ) -> Optional[Union[Dict[str, Any], list]]:
+        """Load JSON data from a file without blocking the event loop."""
+        return await _to_thread(self.load_json, filename)
+
+    async def async_delete_file(self, filename: str) -> bool:
+        """Delete a file without blocking the event loop."""
+        return await _to_thread(self.delete_file, filename)
+
+    async def async_delete_files_by_prefix(self, prefix: str) -> int:
+        """Delete all files that start with the given prefix without blocking the event loop."""
+        return await _to_thread(self.delete_files_by_prefix, prefix)
+
+    async def async_save_binary(self, filepath: str, content: bytes) -> bool:
+        """Save binary content to a file without blocking the event loop."""
+        return await _to_thread(self.save_binary, filepath, content)
+
+    async def async_list_files(self, pattern: str = "*") -> list[str]:
+        """List files in the data directory matching a pattern without blocking the event loop."""
+        return await _to_thread(self.list_files, pattern)
+
+    async def async_get_file_size(self, filename: str) -> Optional[int]:
+        """Get the size of a file in bytes without blocking the event loop."""
+        return await _to_thread(self.get_file_size, filename)
+
+    async def async_save_device_identifiers(self, data: Dict[str, Any]) -> bool:
+        """Save device identifiers without blocking the event loop."""
+        return await _to_thread(self.save_device_identifiers, data)
+
+    async def async_load_device_identifiers(self) -> Optional[Dict[str, Any]]:
+        """Load device identifiers without blocking the event loop."""
+        return await _to_thread(self.load_device_identifiers)
+
+    async def async_device_identifiers_exists(self) -> bool:
+        """Check if device identifiers file exists without blocking the event loop."""
+        return await _to_thread(self.device_identifiers_exists)
 
 
 # Global instance
