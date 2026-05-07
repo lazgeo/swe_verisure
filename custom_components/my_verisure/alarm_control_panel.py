@@ -40,7 +40,7 @@ class MyVerisureAlarmControlPanel(AlarmControlPanelEntity):
         self.config_entry = config_entry
         # Use a simple name and unique_id
         self._attr_name = ENTITY_NAMES["alarm_control_panel"]
-        self._attr_unique_id = f"{config_entry.entry_id}_alarm_panel"
+        self._attr_unique_id = "my_verisure"
         self._attr_code_format = None  # No code required
         self._attr_code_arm_required = False  # No code required for arming
         self._attr_code_disarm_required = False  # No code required for disarming
@@ -77,7 +77,7 @@ class MyVerisureAlarmControlPanel(AlarmControlPanelEntity):
         raw_data = alarm_data.get("data", {})
         if not raw_data:
             return AlarmControlPanelState.DISARMED, {}
-            
+
         internal = raw_data.get("internal", {})
         external = raw_data.get("external", {})
 
@@ -158,7 +158,7 @@ class MyVerisureAlarmControlPanel(AlarmControlPanelEntity):
 
         # Get installation info from services
         detailed_installation = self.coordinator.data.get("detailed_installation", {})
-        
+
         installation_info = detailed_installation.get("installation", {})
 
         attributes = {
@@ -181,12 +181,12 @@ class MyVerisureAlarmControlPanel(AlarmControlPanelEntity):
             "active_alarms": detailed_states.get("active_alarms", []),
             "alarm_count": len(detailed_states.get("active_alarms", [])),
         })
-        
+
         # Add services information
         services_list = installation_info.get("services", [])
         active_services = [s for s in services_list if s.get("active", False)]
         visible_services = [s for s in services_list if s.get("visible", False)]
-        
+
         attributes.update({
             "total_services": len(services_list),
             "active_services": len(active_services),
@@ -199,11 +199,11 @@ class MyVerisureAlarmControlPanel(AlarmControlPanelEntity):
     async def async_alarm_disarm(self, code: str | None = None) -> None:
         """Send disarm command."""
         LOGGER.warning("Disarming alarm (DARM - DESCONECTAR)...")
-        
+
         # Set transition state
         self._transition_state = AlarmControlPanelState.DISARMING
         self.async_write_ha_state()
-        
+
         try:
             installation_id = self.config_entry.data.get("installation_id")
             if installation_id:
@@ -216,7 +216,7 @@ class MyVerisureAlarmControlPanel(AlarmControlPanelEntity):
                 )
             else:
                 LOGGER.error("No installation ID available")
-                
+
             # Clear transition state and refresh
             # self._transition_state = None
 
