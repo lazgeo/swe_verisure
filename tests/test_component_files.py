@@ -24,7 +24,7 @@ class ComponentFilesTest(unittest.TestCase):
 
         self.assertEqual("swe_verisure", manifest["domain"])
         self.assertEqual("Swe Verisure", manifest["name"])
-        self.assertEqual("0.1.2", manifest["version"])
+        self.assertEqual("0.1.3", manifest["version"])
         self.assertEqual(["vsure==2.9.0"], manifest["requirements"])
         self.assertTrue(manifest["config_flow"])
 
@@ -58,6 +58,20 @@ class ComponentFilesTest(unittest.TestCase):
 
         self.assertIn('f"swe_verisure_{entry.data[CONF_EMAIL]}"', coordinator)
         self.assertEqual(2, config_flow.count('f"swe_verisure_{user_input[CONF_EMAIL]}"'))
+
+    def test_config_flow_labels_and_descriptions(self) -> None:
+        """Config-flow fields should have concrete labels and step hints."""
+        for filename in ("strings.json", "translations/en.json", "translations/sv.json"):
+            translations = json.loads((COMPONENT_DIR / filename).read_text("utf-8"))
+            steps = translations["config"]["step"]
+
+            self.assertNotIn("%key:", json.dumps(steps))
+            for step_name in ("user", "reauth_confirm"):
+                self.assertEqual({"email", "password"}, set(steps[step_name]["data"]))
+                self.assertIn("description", steps[step_name])
+            for step_name in ("mfa", "reauth_mfa"):
+                self.assertEqual({"code"}, set(steps[step_name]["data"]))
+                self.assertIn("description", steps[step_name])
 
     def test_compatibility_with_preloaded_older_verisure(self) -> None:
         """Optional exception imports must not break config-flow loading."""

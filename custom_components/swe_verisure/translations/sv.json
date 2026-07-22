@@ -20,29 +20,29 @@
       },
       "mfa": {
         "data": {
-          "code": "Verifieringskod",
-          "description": "Ange den sexsiffriga verifieringskod som Verisure skickade."
-        }
+          "code": "Verifieringskod"
+        },
+        "description": "Ange den sexsiffriga verifieringskod som Verisure skickade."
       },
       "reauth_confirm": {
         "data": {
-          "description": "Autentisera Verisure-kontot igen.",
           "email": "E-postadress",
           "password": "Lösenord"
-        }
+        },
+        "description": "Autentisera Verisure-kontot igen."
       },
       "reauth_mfa": {
         "data": {
-          "code": "Verifieringskod",
-          "description": "Ange den sexsiffriga verifieringskod som Verisure skickade."
-        }
+          "code": "Verifieringskod"
+        },
+        "description": "Ange den sexsiffriga verifieringskod som Verisure skickade."
       },
       "user": {
         "data": {
-          "description": "Logga in med e-postadress och lösenord för Verisure. DNI/NIE behövs inte.",
           "email": "E-postadress",
           "password": "Lösenord"
-        }
+        },
+        "description": "Logga in med e-postadress och lösenord för Verisure. DNI/NIE behövs inte."
       }
     }
   },

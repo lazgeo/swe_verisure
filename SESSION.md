@@ -22,3 +22,6 @@
 - Version 0.1.2 resolves optional `vsure` exception types dynamically because
   Home Assistant's built-in Verisure integration can preload its older library
   version; this prevents `Invalid handler specified` during config-flow import.
+- Version 0.1.3 uses explicit localized config-flow labels and stores help text
+  as step descriptions, avoiding unresolved shared translation keys in custom
+  integrations.

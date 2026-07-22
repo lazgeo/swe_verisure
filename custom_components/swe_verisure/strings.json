@@ -20,29 +20,29 @@
       },
       "mfa": {
         "data": {
-          "code": "Verification code",
-          "description": "Your account has 2-step verification enabled. Please enter the verification code Verisure sends to you."
-        }
+          "code": "Verification code"
+        },
+        "description": "Your account has 2-step verification enabled. Enter the verification code Verisure sends to you."
       },
       "reauth_confirm": {
         "data": {
-          "description": "Re-authenticate with your Verisure My Pages account.",
-          "email": "[%key:common::config_flow::data::email%]",
-          "password": "[%key:common::config_flow::data::password%]"
-        }
+          "email": "Email",
+          "password": "Password"
+        },
+        "description": "Re-authenticate with your Verisure account."
       },
       "reauth_mfa": {
         "data": {
-          "code": "[%key:component::swe_verisure::config::step::mfa::data::code%]",
-          "description": "[%key:component::swe_verisure::config::step::mfa::data::description%]"
-        }
+          "code": "Verification code"
+        },
+        "description": "Enter the verification code Verisure sends to you."
       },
       "user": {
         "data": {
-          "description": "Sign in with your Verisure email and password. DNI/NIE is not required.",
-          "email": "[%key:common::config_flow::data::email%]",
-          "password": "[%key:common::config_flow::data::password%]"
-        }
+          "email": "Email",
+          "password": "Password"
+        },
+        "description": "Sign in with your Verisure email and password. DNI/NIE is not required."
       }
     }
   },
