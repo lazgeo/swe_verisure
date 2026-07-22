@@ -38,3 +38,7 @@
   diagnostics.
 - Rate-limit exceptions are handled before their generic login-error base
   class, so `AUT_00021` during setup retries instead of starting reauthentication.
+- Added public configuration, entity/event/service, automation, and operations
+  guides plus `CHANGELOG.md`. Examples use placeholders only and document
+  privacy, rate limits, verification scope, and intentionally unsupported API
+  methods without including live installation values.

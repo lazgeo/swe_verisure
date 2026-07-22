@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 
 COMPONENT_DIR = Path(__file__).parents[1] / "custom_components" / "swe_verisure"
+REPO_DIR = COMPONENT_DIR.parents[1]
 
 
 class ComponentFilesTest(unittest.TestCase):
@@ -174,6 +175,29 @@ class ComponentFilesTest(unittest.TestCase):
                 ]
                 if rate_indexes and login_indexes:
                     self.assertLess(rate_indexes[0], login_indexes[0], filename)
+
+    def test_public_documentation_covers_extended_features(self) -> None:
+        """Public guides and changelog should cover the integration surfaces."""
+        documents = {
+            "configuration": REPO_DIR / "docs" / "configuration.md",
+            "entities": REPO_DIR / "docs" / "entities.md",
+            "automations": REPO_DIR / "docs" / "automations.md",
+            "operations": REPO_DIR / "docs" / "operations.md",
+            "changelog": REPO_DIR / "CHANGELOG.md",
+        }
+        for name, path in documents.items():
+            with self.subTest(document=name):
+                self.assertTrue(path.is_file())
+
+        self.assertIn("user location tracking", documents["configuration"].read_text("utf-8"))
+        entities = documents["entities"].read_text("utf-8")
+        for event_type in ("intrusion", "fire", "sos", "water", "technical"):
+            self.assertIn(f"`{event_type}`", entities)
+        self.assertIn("event.example_security_alarm", documents["automations"].read_text("utf-8"))
+        operations = documents["operations"].read_text("utf-8")
+        self.assertIn("AUT_00021", operations)
+        self.assertIn("Guardian SOS", operations)
+        self.assertIn("## Unreleased", documents["changelog"].read_text("utf-8"))
 
     def test_poll_interval_option_is_bounded(self) -> None:
         """The polling interval should be configurable with finite bounds."""
