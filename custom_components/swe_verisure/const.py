@@ -12,6 +12,7 @@ LOGGER = logging.getLogger(__package__)
 CONF_GIID = "giid"
 CONF_LOCK_CODE_DIGITS = "lock_code_digits"
 CONF_LOCK_DEFAULT_CODE = "lock_default_code"
+CONF_USER_TRACKING = "user_tracking"
 
 DEFAULT_SCAN_INTERVAL = timedelta(minutes=1)
 MIN_SCAN_INTERVAL_SECONDS = 10
@@ -20,6 +21,7 @@ DEFAULT_LOCK_CODE_DIGITS = 4
 
 # Verisure cookies are valid for roughly 15 minutes; refresh before expiry.
 COOKIE_REFRESH_INTERVAL = timedelta(minutes=10)
+METADATA_REFRESH_INTERVAL = timedelta(hours=1)
 
 # Exponential backoff for Verisure rate-limit responses.
 RATE_LIMIT_BACKOFF = (

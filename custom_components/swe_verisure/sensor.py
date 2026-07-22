@@ -8,7 +8,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE, UnitOfTemperature
+from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import Entity
@@ -27,11 +27,13 @@ async def async_setup_entry(
     """Set up Verisure sensors based on a config entry."""
     coordinator: VerisureDataUpdateCoordinator = entry.runtime_data
 
-    sensors: list[Entity] = [
+    sensors: list[Entity] = [VerisureRemainingSms(coordinator)]
+
+    sensors.extend(
         VerisureThermometer(coordinator, serial_number)
         for serial_number, values in coordinator.data["climate"].items()
         if "temperatureValue" in values
-    ]
+    )
 
     sensors.extend(
         VerisureHygrometer(coordinator, serial_number)
@@ -139,3 +141,49 @@ class VerisureHygrometer(
             and self.serial_number in self.coordinator.data["climate"]
             and "humidityValue" in self.coordinator.data["climate"][self.serial_number]
         )
+
+
+class VerisureRemainingSms(
+    CoordinatorEntity[VerisureDataUpdateCoordinator], SensorEntity
+):
+    """Representation of the installation's remaining SMS balance."""
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:message-text-outline"
+    _attr_native_unit_of_measurement = "SMS"
+    _attr_translation_key = "remaining_sms"
+
+    @property
+    def unique_id(self) -> str:
+        """Return the unique ID for this entity."""
+        return f"{self.coordinator.config_entry.data[CONF_GIID]}_remaining_sms"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return the alarm installation device information."""
+        return DeviceInfo(
+            name="Verisure Alarm",
+            manufacturer="Verisure",
+            model="VBox",
+            identifiers={(DOMAIN, self.coordinator.config_entry.data[CONF_GIID])},
+            configuration_url="https://mypages.verisure.com",
+        )
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the remaining SMS count."""
+        value = self.coordinator.data.get("remaining_sms")
+        return value if isinstance(value, int) else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, bool]:
+        """Return which operations consume SMS credits."""
+        charges = self.coordinator.data.get("sms_charges")
+        if not isinstance(charges, dict):
+            return {}
+        return {
+            key: value
+            for key, value in charges.items()
+            if key != "__typename" and isinstance(value, bool)
+        }

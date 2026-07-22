@@ -29,7 +29,10 @@ async def async_setup_entry(
     """Set up Verisure binary sensors based on a config entry."""
     coordinator: VerisureDataUpdateCoordinator = entry.runtime_data
 
-    sensors: list[Entity] = [VerisureEthernetStatus(coordinator)]
+    sensors: list[Entity] = [
+        VerisureEthernetStatus(coordinator),
+        VerisureGuardianStatus(coordinator),
+    ]
 
     sensors.extend(
         VerisureDoorWindowSensor(coordinator, serial_number)
@@ -132,3 +135,35 @@ class VerisureEthernetStatus(
     def available(self) -> bool:
         """Return True if entity is available."""
         return super().available and self.coordinator.data["broadband"] is not None
+
+
+class VerisureGuardianStatus(
+    CoordinatorEntity[VerisureDataUpdateCoordinator], BinarySensorEntity
+):
+    """Representation of the Verisure Guardian feature status."""
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:shield-account"
+    _attr_translation_key = "guardian"
+
+    @property
+    def unique_id(self) -> str:
+        """Return the unique ID for this entity."""
+        return f"{self.coordinator.config_entry.data[CONF_GIID]}_guardian"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return the alarm installation device information."""
+        return DeviceInfo(
+            name="Verisure Alarm",
+            manufacturer="Verisure",
+            model="VBox",
+            identifiers={(DOMAIN, self.coordinator.config_entry.data[CONF_GIID])},
+            configuration_url="https://mypages.verisure.com",
+        )
+
+    @property
+    def is_on(self) -> bool:
+        """Return whether Guardian is activated for the installation."""
+        return bool(self.coordinator.data.get("guardian"))

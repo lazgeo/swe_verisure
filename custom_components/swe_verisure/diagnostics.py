@@ -14,10 +14,22 @@ TO_REDACT = {
     "date",
     "area",
     "deviceArea",
+    "deviceId",
+    "deviceLabel",
+    "deviceName",
+    "eventId",
+    "eventTime",
+    "initials",
+    "currentLocationId",
+    "currentLocationName",
+    "currentLocationTimestamp",
     "name",
     "time",
     "reportTime",
     "userString",
+    "userName",
+    "webAccount",
+    "xbnContactId",
 }
 
 

@@ -29,3 +29,12 @@
   coordinator request, exposes new intrusion records as a Home Assistant event
   entity, and adds a 60-second default polling option adjustable from 10 to
   3600 seconds.
+- Version 0.3.0 broadens alarm events to fire, SOS, water, animal, technical,
+  and warning categories; adds a separate arm/disarm/lock/unlock/picture
+  activity event entity; and exposes Guardian, SMS balance/charges, read-only
+  gateway firmware status, and opt-in disabled-by-default user trackers.
+- Dynamic data shares the normal batched poll. SMS metadata, firmware, and
+  Guardian status refresh hourly. Personal tracking fields are redacted from
+  diagnostics.
+- Rate-limit exceptions are handled before their generic login-error base
+  class, so `AUT_00021` during setup retries instead of starting reauthentication.

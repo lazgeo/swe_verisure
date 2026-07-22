@@ -50,11 +50,27 @@
     "binary_sensor": {
       "ethernet": {
         "name": "Ethernet status"
+      },
+      "guardian": {
+        "name": "Guardian"
       }
     },
     "event": {
-      "intrusion": {
-        "name": "Intrusion alarm"
+      "activity": {
+        "name": "Alarm activity"
+      },
+      "security": {
+        "name": "Security alarm"
+      }
+    },
+    "sensor": {
+      "remaining_sms": {
+        "name": "Remaining SMS"
+      }
+    },
+    "update": {
+      "gateway_firmware": {
+        "name": "Firmware"
       }
     }
   },
@@ -63,10 +79,12 @@
       "init": {
         "data": {
           "lock_code_digits": "Number of digits in PIN code for locks",
-          "scan_interval": "Polling interval (seconds)"
+          "scan_interval": "Polling interval (seconds)",
+          "user_tracking": "Enable user location tracking"
         },
         "data_description": {
-          "scan_interval": "How often all Verisure data, including intrusion events, is fetched. Allowed range: 10 to 3600 seconds. Short intervals increase API traffic."
+          "scan_interval": "How often dynamic Verisure data, including alarm and activity events, is fetched. Allowed range: 10 to 3600 seconds. Static metadata is refreshed hourly. Short intervals increase API traffic.",
+          "user_tracking": "Fetch account users' Verisure location names and timestamps. Trackers are created disabled and must also be enabled individually."
         }
       }
     }

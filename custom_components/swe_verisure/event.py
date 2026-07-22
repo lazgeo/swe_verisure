@@ -1,4 +1,4 @@
-"""Event entities for Swe Verisure intrusion alarms."""
+"""Event entities for Swe Verisure alarm and activity records."""
 
 from __future__ import annotations
 
@@ -15,7 +15,16 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import CONF_GIID, DOMAIN
 from .coordinator import VerisureDataUpdateCoordinator
 
-EVENT_TYPE_INTRUSION = "intrusion"
+SECURITY_EVENT_TYPES = [
+    "intrusion",
+    "fire",
+    "sos",
+    "water",
+    "animal",
+    "technical",
+    "warning",
+]
+ACTIVITY_EVENT_TYPES = ["arm", "disarm", "lock", "unlock", "picture"]
 MAX_SEEN_EVENT_IDS = 100
 
 
@@ -24,25 +33,49 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up the intrusion event entity."""
-    async_add_entities([VerisureIntrusionEvent(entry.runtime_data)])
+    """Set up Verisure event entities."""
+    async_add_entities(
+        [
+            VerisureEvent(
+                entry.runtime_data,
+                data_key="security_events",
+                event_types=SECURITY_EVENT_TYPES,
+                translation_key="security",
+                unique_id_suffix="intrusion_event",
+            ),
+            VerisureEvent(
+                entry.runtime_data,
+                data_key="activity_events",
+                event_types=ACTIVITY_EVENT_TYPES,
+                translation_key="activity",
+                unique_id_suffix="activity_event",
+            ),
+        ]
+    )
 
 
-class VerisureIntrusionEvent(
-    CoordinatorEntity[VerisureDataUpdateCoordinator], EventEntity
-):
-    """Report new intrusion records from the Verisure event log."""
+class VerisureEvent(CoordinatorEntity[VerisureDataUpdateCoordinator], EventEntity):
+    """Report new records from a filtered Verisure event log."""
 
-    _attr_event_types = [EVENT_TYPE_INTRUSION]
     _attr_has_entity_name = True
-    _attr_translation_key = "intrusion"
 
-    def __init__(self, coordinator: VerisureDataUpdateCoordinator) -> None:
+    def __init__(
+        self,
+        coordinator: VerisureDataUpdateCoordinator,
+        *,
+        data_key: str,
+        event_types: list[str],
+        translation_key: str,
+        unique_id_suffix: str,
+    ) -> None:
         """Initialize the event entity."""
         super().__init__(coordinator)
         self._attr_unique_id = (
-            f"{coordinator.config_entry.data[CONF_GIID]}_intrusion_event"
+            f"{coordinator.config_entry.data[CONF_GIID]}_{unique_id_suffix}"
         )
+        self._attr_event_types = event_types
+        self._attr_translation_key = translation_key
+        self._data_key = data_key
         self._seen_event_ids: set[str] = set()
         self._initialized = False
 
@@ -72,6 +105,7 @@ class VerisureIntrusionEvent(
         return {
             "event_id": event.get("eventId"),
             "event_time": event.get("eventTime"),
+            "event_category": event.get("eventCategory"),
             "verisure_event_type": event.get("eventType"),
             "event_source": event.get("eventSource"),
             "arm_state": event.get("armState"),
@@ -80,8 +114,8 @@ class VerisureIntrusionEvent(
         }
 
     def _current_events(self) -> list[Mapping[str, Any]]:
-        """Return valid intrusion records from coordinator data."""
-        events = self.coordinator.data.get("intrusion_events", [])
+        """Return valid records for this event entity."""
+        events = self.coordinator.data.get(self._data_key, [])
         return [event for event in events if isinstance(event, Mapping)]
 
     def _process_events(self) -> None:
@@ -107,7 +141,10 @@ class VerisureIntrusionEvent(
         for event in sorted(
             new_events, key=lambda item: str(item.get("eventTime", ""))
         ):
-            self._trigger_event(EVENT_TYPE_INTRUSION, self._event_attributes(event))
+            event_type = str(event.get("eventCategory", "")).lower()
+            if event_type not in self.event_types:
+                continue
+            self._trigger_event(event_type, self._event_attributes(event))
             self.async_write_ha_state()
 
         self._seen_event_ids.update(current_ids)
@@ -121,6 +158,6 @@ class VerisureIntrusionEvent(
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        """Process newly fetched intrusion events."""
+        """Process newly fetched events."""
         self._process_events()
         super()._handle_coordinator_update()

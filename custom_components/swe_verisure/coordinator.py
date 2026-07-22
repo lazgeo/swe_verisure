@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta
 from time import sleep
-from typing import override
+from typing import Any, override
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD, CONF_SCAN_INTERVAL
@@ -14,10 +14,12 @@ from homeassistant.util import Throttle, dt as dt_util
 
 from .const import (
     CONF_GIID,
+    CONF_USER_TRACKING,
     COOKIE_REFRESH_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     LOGGER,
+    METADATA_REFRESH_INTERVAL,
     RATE_LIMIT_BACKOFF,
 )
 from .verisure_compat import (
@@ -54,6 +56,9 @@ class VerisureDataUpdateCoordinator(DataUpdateCoordinator):
         self._overview: list[dict] = []
         self._rate_limit_backoff_level = 0
         self._last_successful_cookie_refresh: datetime | None = None
+        self._last_metadata_refresh: datetime | None = None
+        self._metadata: dict = {}
+        self._user_tracking_enabled = entry.options.get(CONF_USER_TRACKING, False)
 
         self.verisure = Verisure(
             username=entry.data[CONF_EMAIL],
@@ -112,10 +117,10 @@ class VerisureDataUpdateCoordinator(DataUpdateCoordinator):
             ) from ex
         except VerisureCookieReadError:
             await self._async_password_login_after_cookie_read()
-        except VerisureLoginError as ex:
-            raise ConfigEntryAuthFailed("Credentials expired for Verisure") from ex
         except VerisureRateLimitError as ex:
             self._raise_rate_limited(ex, "session refresh")
+        except VerisureLoginError as ex:
+            raise ConfigEntryAuthFailed("Credentials expired for Verisure") from ex
         except (VerisureRequestError, VerisureResponseError) as ex:
             raise UpdateFailed("Could not refresh Verisure session (transient)") from ex
         except VerisureError as ex:
@@ -160,11 +165,11 @@ class VerisureDataUpdateCoordinator(DataUpdateCoordinator):
         except VerisureCookieReadError:
             LOGGER.debug("Cookie unreadable, re-authenticating with password")
             await self._async_password_login_after_cookie_read()
+        except VerisureRateLimitError as ex:
+            self._raise_rate_limited(ex, "cookie refresh")
         except VerisureLoginError:
             LOGGER.debug("Login token expired, refreshing session")
             await self._async_refresh_session_after_auth_failure()
-        except VerisureRateLimitError as ex:
-            self._raise_rate_limited(ex, "cookie refresh")
         except (VerisureRequestError, VerisureResponseError) as ex:
             LOGGER.warning(
                 "Verisure unreachable or server error during cookie refresh, %s", ex
@@ -192,13 +197,17 @@ class VerisureDataUpdateCoordinator(DataUpdateCoordinator):
                     ex,
                 )
                 return False
+        except VerisureRateLimitError as ex:
+            LOGGER.warning(
+                "Verisure login rate limited; setup will retry later, %s", ex
+            )
+            return False
         except VerisureLoginError as ex:
             LOGGER.error("Credentials expired for Verisure, %s", ex)
             raise ConfigEntryAuthFailed("Credentials expired for Verisure") from ex
         except (
             VerisureRequestError,
             VerisureResponseError,
-            VerisureRateLimitError,
         ) as ex:
             LOGGER.warning(
                 "Verisure login unavailable (likely transient), %s",
@@ -219,19 +228,55 @@ class VerisureDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> dict:
         """Fetch data from Verisure."""
         await self._async_refresh_cookie_if_needed()
-        intrusion_events_query = self.verisure.event_log()
-        intrusion_events_query["variables"]["eventCategories"] = ["INTRUSION"]
+        security_events_query = self.verisure.event_log()
+        security_events_query["variables"]["eventCategories"] = [
+            "INTRUSION",
+            "FIRE",
+            "SOS",
+            "WATER",
+            "ANIMAL",
+            "TECHNICAL",
+            "WARNING",
+        ]
+        activity_events_query = self.verisure.event_log()
+        activity_events_query["variables"]["eventCategories"] = [
+            "ARM",
+            "DISARM",
+            "LOCK",
+            "UNLOCK",
+            "PICTURE",
+        ]
+        now = dt_util.utcnow()
+        metadata_due = (
+            self._last_metadata_refresh is None
+            or now - self._last_metadata_refresh >= METADATA_REFRESH_INTERVAL
+        )
+        operations = [
+            self.verisure.arm_state(),
+            self.verisure.broadband(),
+            self.verisure.cameras(),
+            self.verisure.climate(),
+            self.verisure.door_window(),
+            self.verisure.smart_lock(),
+            self.verisure.smartplugs(),
+            security_events_query,
+            activity_events_query,
+        ]
+        if self._user_tracking_enabled:
+            operations.append(self.verisure.user_trackings())
+        if metadata_due:
+            operations.extend(
+                (
+                    self.verisure.charge_sms(),
+                    self.verisure.firmware(),
+                    self.verisure.is_guardian_activated(),
+                    self.verisure.remaining_sms(),
+                )
+            )
         try:
             overview = await self.hass.async_add_executor_job(
                 self.verisure.request,
-                self.verisure.arm_state(),
-                self.verisure.broadband(),
-                self.verisure.cameras(),
-                self.verisure.climate(),
-                self.verisure.door_window(),
-                self.verisure.smart_lock(),
-                self.verisure.smartplugs(),
-                intrusion_events_query,
+                *operations,
             )
         except VerisureRateLimitError as err:
             self._raise_rate_limited(err, "data update")
@@ -239,8 +284,8 @@ class VerisureDataUpdateCoordinator(DataUpdateCoordinator):
             LOGGER.error("Could not read overview, %s", err)
             raise UpdateFailed("Could not read overview") from err
 
-        def unpack(overview: list, value: str) -> dict | list:
-            unpacked: dict | list | None = next(
+        def unpack(overview: list, value: str) -> Any:
+            unpacked = next(
                 (
                     item["data"]["installation"][value]
                     for item in overview
@@ -248,9 +293,32 @@ class VerisureDataUpdateCoordinator(DataUpdateCoordinator):
                 ),
                 None,
             )
-            return unpacked or []
+            return [] if unpacked is None else unpacked
 
-        intrusion_event_log = unpack(overview, "eventLog")
+        event_logs = [
+            item["data"]["installation"]["eventLog"]
+            for item in overview
+            if "eventLog" in item.get("data", {}).get("installation", {})
+        ]
+        security_event_log = event_logs[0] if event_logs else {}
+        activity_event_log = event_logs[1] if len(event_logs) > 1 else {}
+
+        if metadata_due:
+            firmware = unpack(overview, "firmware")
+            activated_feature = unpack(overview, "activatedFeature")
+            self._metadata = {
+                "sms_charges": unpack(overview, "chargeSms"),
+                "firmware": (
+                    firmware.get("status", {}) if isinstance(firmware, dict) else {}
+                ),
+                "guardian": (
+                    activated_feature.get("isFeatureActivated", False)
+                    if isinstance(activated_feature, dict)
+                    else False
+                ),
+                "remaining_sms": unpack(overview, "remainingSms"),
+            }
+            self._last_metadata_refresh = now
 
         # Store data in a way Home Assistant can easily consume it
         self._overview = overview
@@ -278,11 +346,22 @@ class VerisureDataUpdateCoordinator(DataUpdateCoordinator):
                 device["device"]["deviceLabel"]: device
                 for device in unpack(overview, "smartplugs")
             },
-            "intrusion_events": (
-                intrusion_event_log.get("pagedList", [])
-                if isinstance(intrusion_event_log, dict)
+            "security_events": (
+                security_event_log.get("pagedList", [])
+                if isinstance(security_event_log, dict)
                 else []
             ),
+            "activity_events": (
+                activity_event_log.get("pagedList", [])
+                if isinstance(activity_event_log, dict)
+                else []
+            ),
+            "user_trackings": {
+                str(tracking.get("xbnContactId") or tracking.get("deviceId")): tracking
+                for tracking in unpack(overview, "userTrackings")
+                if tracking.get("xbnContactId") or tracking.get("deviceId")
+            },
+            **self._metadata,
         }
 
     @Throttle(timedelta(seconds=60))

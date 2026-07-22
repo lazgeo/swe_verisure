@@ -24,7 +24,7 @@ class ComponentFilesTest(unittest.TestCase):
 
         self.assertEqual("swe_verisure", manifest["domain"])
         self.assertEqual("Swe Verisure", manifest["name"])
-        self.assertEqual("0.2.0", manifest["version"])
+        self.assertEqual("0.3.0", manifest["version"])
         self.assertEqual(["vsure==2.9.0"], manifest["requirements"])
         self.assertTrue(manifest["config_flow"])
 
@@ -103,16 +103,77 @@ class ComponentFilesTest(unittest.TestCase):
             source = (COMPONENT_DIR / filename).read_text("utf-8")
             self.assertNotIn("from verisure import", source)
 
-    def test_intrusion_polling_contract(self) -> None:
-        """Intrusions should share the coordinator poll and expose an event entity."""
+    def test_event_polling_contract(self) -> None:
+        """Security and activity records should share the coordinator poll."""
         coordinator = (COMPONENT_DIR / "coordinator.py").read_text("utf-8")
         component = (COMPONENT_DIR / "__init__.py").read_text("utf-8")
         event = (COMPONENT_DIR / "event.py").read_text("utf-8")
 
-        self.assertIn('eventCategories"] = ["INTRUSION"]', coordinator)
-        self.assertIn('"intrusion_events"', coordinator)
+        self.assertIn('"INTRUSION"', coordinator)
+        self.assertIn('"FIRE"', coordinator)
+        self.assertIn('"activity_events"', coordinator)
+        self.assertIn('"security_events"', coordinator)
         self.assertIn("Platform.EVENT", component)
-        self.assertIn("_trigger_event(EVENT_TYPE_INTRUSION", event)
+        self.assertIn("_trigger_event(event_type", event)
+
+    def test_additional_graphql_features_are_exposed(self) -> None:
+        """Metadata and opt-in tracking should have matching HA platforms."""
+        coordinator = (COMPONENT_DIR / "coordinator.py").read_text("utf-8")
+        component = (COMPONENT_DIR / "__init__.py").read_text("utf-8")
+
+        for query in (
+            "firmware",
+            "is_guardian_activated",
+            "remaining_sms",
+            "user_trackings",
+        ):
+            self.assertIn(f"self.verisure.{query}()", coordinator)
+        self.assertIn("Platform.DEVICE_TRACKER", component)
+        self.assertIn("Platform.UPDATE", component)
+
+    def test_tracking_is_opt_in_and_redacted(self) -> None:
+        """Location tracking should default off and stay out of diagnostics."""
+        constants = (COMPONENT_DIR / "const.py").read_text("utf-8")
+        coordinator = (COMPONENT_DIR / "coordinator.py").read_text("utf-8")
+        tracker = (COMPONENT_DIR / "device_tracker.py").read_text("utf-8")
+        diagnostics = (COMPONENT_DIR / "diagnostics.py").read_text("utf-8")
+
+        self.assertIn('CONF_USER_TRACKING = "user_tracking"', constants)
+        self.assertIn("entry.options.get(CONF_USER_TRACKING, False)", coordinator)
+        self.assertIn("_attr_entity_registry_enabled_default = False", tracker)
+        for key in ("currentLocationName", "deviceId", "webAccount"):
+            self.assertIn(f'"{key}"', diagnostics)
+
+    def test_rate_limits_are_caught_before_login_errors(self) -> None:
+        """Rate-limit subclasses must not be treated as expired credentials."""
+
+        def exception_names(node: ast.expr | None) -> set[str]:
+            if isinstance(node, ast.Name):
+                return {node.id}
+            if isinstance(node, ast.Tuple):
+                return {
+                    name
+                    for item in node.elts
+                    for name in exception_names(item)
+                }
+            return set()
+
+        for filename in ("config_flow.py", "coordinator.py"):
+            tree = ast.parse((COMPONENT_DIR / filename).read_text("utf-8"))
+            for try_node in (node for node in ast.walk(tree) if isinstance(node, ast.Try)):
+                handlers = [exception_names(handler.type) for handler in try_node.handlers]
+                rate_indexes = [
+                    index
+                    for index, names in enumerate(handlers)
+                    if "VerisureRateLimitError" in names
+                ]
+                login_indexes = [
+                    index
+                    for index, names in enumerate(handlers)
+                    if "VerisureLoginError" in names
+                ]
+                if rate_indexes and login_indexes:
+                    self.assertLess(rate_indexes[0], login_indexes[0], filename)
 
     def test_poll_interval_option_is_bounded(self) -> None:
         """The polling interval should be configurable with finite bounds."""

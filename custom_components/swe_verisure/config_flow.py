@@ -15,6 +15,7 @@ from homeassistant.helpers.storage import STORAGE_DIR
 from .const import (
     CONF_GIID,
     CONF_LOCK_CODE_DIGITS,
+    CONF_USER_TRACKING,
     DEFAULT_LOCK_CODE_DIGITS,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
@@ -70,6 +71,9 @@ class VerisureConfigFlowHandler(ConfigFlow, domain=DOMAIN):
 
             try:
                 await self.hass.async_add_executor_job(self.verisure.login)
+            except VerisureRateLimitError as ex:
+                LOGGER.debug("Verisure rate limited during login, %s", ex)
+                errors["base"] = "mfa_rate_limited"
             except VerisureLoginError as ex:
                 if "Multifactor authentication enabled" in str(ex):
                     try:
@@ -96,9 +100,6 @@ class VerisureConfigFlowHandler(ConfigFlow, domain=DOMAIN):
                 else:
                     LOGGER.debug("Could not log in to Verisure, %s", ex)
                     errors["base"] = "invalid_auth"
-            except VerisureRateLimitError as ex:
-                LOGGER.debug("Verisure rate limited during login, %s", ex)
-                errors["base"] = "mfa_rate_limited"
             except (VerisureError, VerisureResponseError) as ex:
                 LOGGER.debug("Unexpected response from Verisure, %s", ex)
                 errors["base"] = "unknown"
@@ -127,6 +128,9 @@ class VerisureConfigFlowHandler(ConfigFlow, domain=DOMAIN):
                 await self.hass.async_add_executor_job(
                     self.verisure.validate_mfa, user_input[CONF_CODE]
                 )
+            except VerisureRateLimitError as ex:
+                LOGGER.debug("Verisure rate limited during MFA validation, %s", ex)
+                errors["base"] = "mfa_rate_limited"
             except VerisureLoginError as ex:
                 LOGGER.debug("Could not log in to Verisure, %s", ex)
                 errors["base"] = "invalid_auth"
@@ -221,6 +225,9 @@ class VerisureConfigFlowHandler(ConfigFlow, domain=DOMAIN):
 
             try:
                 await self.hass.async_add_executor_job(self.verisure.login)
+            except VerisureRateLimitError as ex:
+                LOGGER.debug("Verisure rate limited during reauth login, %s", ex)
+                errors["base"] = "mfa_rate_limited"
             except VerisureLoginError as ex:
                 if "Multifactor authentication enabled" in str(ex):
                     try:
@@ -248,9 +255,6 @@ class VerisureConfigFlowHandler(ConfigFlow, domain=DOMAIN):
                 else:
                     LOGGER.debug("Could not log in to Verisure, %s", ex)
                     errors["base"] = "invalid_auth"
-            except VerisureRateLimitError as ex:
-                LOGGER.debug("Verisure rate limited during reauth login, %s", ex)
-                errors["base"] = "mfa_rate_limited"
             except (VerisureError, VerisureResponseError) as ex:
                 LOGGER.debug("Unexpected response from Verisure, %s", ex)
                 errors["base"] = "unknown"
@@ -287,6 +291,11 @@ class VerisureConfigFlowHandler(ConfigFlow, domain=DOMAIN):
                 await self.hass.async_add_executor_job(
                     self.verisure.validate_mfa, user_input[CONF_CODE]
                 )
+            except VerisureRateLimitError as ex:
+                LOGGER.debug(
+                    "Verisure rate limited during reauth MFA validation, %s", ex
+                )
+                errors["base"] = "mfa_rate_limited"
             except VerisureLoginError as ex:
                 LOGGER.debug("Could not log in to Verisure, %s", ex)
                 errors["base"] = "invalid_auth"
@@ -355,6 +364,14 @@ class VerisureOptionsFlowHandler(OptionsFlow):
                             max=MAX_SCAN_INTERVAL_SECONDS,
                         ),
                     ),
+                    vol.Optional(
+                        CONF_USER_TRACKING,
+                        description={
+                            "suggested_value": self.config_entry.options.get(
+                                CONF_USER_TRACKING, False
+                            )
+                        },
+                    ): bool,
                 }
             ),
             errors=errors,

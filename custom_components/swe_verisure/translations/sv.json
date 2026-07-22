@@ -50,11 +50,27 @@
     "binary_sensor": {
       "ethernet": {
         "name": "Ethernetstatus"
+      },
+      "guardian": {
+        "name": "Guardian"
       }
     },
     "event": {
-      "intrusion": {
-        "name": "Inbrottslarm"
+      "activity": {
+        "name": "Larmaktivitet"
+      },
+      "security": {
+        "name": "Säkerhetslarm"
+      }
+    },
+    "sensor": {
+      "remaining_sms": {
+        "name": "Återstående SMS"
+      }
+    },
+    "update": {
+      "gateway_firmware": {
+        "name": "Fast programvara"
       }
     }
   },
@@ -63,10 +79,12 @@
       "init": {
         "data": {
           "lock_code_digits": "Antal siffror i låskoden",
-          "scan_interval": "Avsökningsintervall (sekunder)"
+          "scan_interval": "Avsökningsintervall (sekunder)",
+          "user_tracking": "Aktivera användarens platsspårning"
         },
         "data_description": {
-          "scan_interval": "Hur ofta all Verisure-data, inklusive inbrottshändelser, hämtas. Tillåtet intervall: 10 till 3600 sekunder. Korta intervall ökar API-trafiken."
+          "scan_interval": "Hur ofta dynamisk Verisure-data, inklusive larm- och aktivitetshändelser, hämtas. Tillåtet intervall: 10 till 3600 sekunder. Statisk metadata hämtas varje timme. Korta intervall ökar API-trafiken.",
+          "user_tracking": "Hämta Verisure-platsnamn och tidsstämplar för kontots användare. Spårarna skapas inaktiverade och måste även aktiveras var för sig."
         }
       }
     }

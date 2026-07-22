@@ -21,6 +21,11 @@ six-digit verification code.
 - Multiple Verisure installations
 - Automatic cookie refresh and rate-limit backoff
 - Intrusion alarm events from the GraphQL event log
+- Fire, SOS, water, technical, and warning alarm events
+- Arm, disarm, lock, unlock, and camera activity events
+- Guardian activation and remaining SMS diagnostics
+- Read-only gateway firmware update status
+- Optional user location trackers, disabled by default
 - Configurable polling interval (60 seconds by default; 10-3600 seconds)
 
 ## Installation
@@ -50,11 +55,15 @@ and authenticated GraphQL requests.
 
 ## Development status
 
-Version `0.2.0` is an initial implementation. Read-only login, token refresh,
-installation discovery, and all seven coordinator queries have been tested
+Version `0.3.0` is an initial implementation. Read-only login, token refresh,
+installation discovery, and the coordinator query batch have been tested
 against a live Swedish account. State-changing alarm, lock, smart-plug, and
 camera commands were not exercised during development to avoid changing the
 live system.
+
+User location tracking must first be enabled in the integration options. Its
+entities are created disabled by default and must then be enabled individually.
+Names, device identifiers, and location data are redacted from diagnostics.
 
 This component is derived from Home Assistant's Apache-2.0 licensed Verisure
 integration at tag `2026.4.1`. The Spanish
