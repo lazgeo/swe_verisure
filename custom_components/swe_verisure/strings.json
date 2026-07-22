@@ -51,13 +51,22 @@
       "ethernet": {
         "name": "Ethernet status"
       }
+    },
+    "event": {
+      "intrusion": {
+        "name": "Intrusion alarm"
+      }
     }
   },
   "options": {
     "step": {
       "init": {
         "data": {
-          "lock_code_digits": "Number of digits in PIN code for locks"
+          "lock_code_digits": "Number of digits in PIN code for locks",
+          "scan_interval": "Polling interval (seconds)"
+        },
+        "data_description": {
+          "scan_interval": "How often all Verisure data, including intrusion events, is fetched. Allowed range: 10 to 3600 seconds. Short intervals increase API traffic."
         }
       }
     }

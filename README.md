@@ -20,6 +20,8 @@ six-digit verification code.
 - Smart plugs
 - Multiple Verisure installations
 - Automatic cookie refresh and rate-limit backoff
+- Intrusion alarm events from the GraphQL event log
+- Configurable polling interval (60 seconds by default; 10-3600 seconds)
 
 ## Installation
 
@@ -48,7 +50,7 @@ and authenticated GraphQL requests.
 
 ## Development status
 
-Version `0.1.3` is an initial implementation. Read-only login, token refresh,
+Version `0.2.0` is an initial implementation. Read-only login, token refresh,
 installation discovery, and all seven coordinator queries have been tested
 against a live Swedish account. State-changing alarm, lock, smart-plug, and
 camera commands were not exercised during development to avoid changing the

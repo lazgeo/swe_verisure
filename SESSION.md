@@ -25,3 +25,7 @@
 - Version 0.1.3 uses explicit localized config-flow labels and stores help text
   as step descriptions, avoiding unresolved shared translation keys in custom
   integrations.
+- Version 0.2.0 adds GraphQL intrusion event-log polling to the existing batched
+  coordinator request, exposes new intrusion records as a Home Assistant event
+  entity, and adds a 60-second default polling option adjustable from 10 to
+  3600 seconds.

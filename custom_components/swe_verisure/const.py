@@ -14,6 +14,8 @@ CONF_LOCK_CODE_DIGITS = "lock_code_digits"
 CONF_LOCK_DEFAULT_CODE = "lock_default_code"
 
 DEFAULT_SCAN_INTERVAL = timedelta(minutes=1)
+MIN_SCAN_INTERVAL_SECONDS = 10
+MAX_SCAN_INTERVAL_SECONDS = 3600
 DEFAULT_LOCK_CODE_DIGITS = 4
 
 # Verisure cookies are valid for roughly 15 minutes; refresh before expiry.

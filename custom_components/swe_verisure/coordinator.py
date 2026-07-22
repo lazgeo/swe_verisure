@@ -5,7 +5,7 @@ from time import sleep
 from typing import override
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
+from homeassistant.const import CONF_EMAIL, CONF_PASSWORD, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.storage import STORAGE_DIR
@@ -68,7 +68,11 @@ class VerisureDataUpdateCoordinator(DataUpdateCoordinator):
             LOGGER,
             config_entry=entry,
             name=DOMAIN,
-            update_interval=DEFAULT_SCAN_INTERVAL,
+            update_interval=timedelta(
+                seconds=entry.options.get(
+                    CONF_SCAN_INTERVAL, int(DEFAULT_SCAN_INTERVAL.total_seconds())
+                )
+            ),
         )
 
     async def _async_password_login_after_cookie_read(self) -> None:
@@ -215,6 +219,8 @@ class VerisureDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> dict:
         """Fetch data from Verisure."""
         await self._async_refresh_cookie_if_needed()
+        intrusion_events_query = self.verisure.event_log()
+        intrusion_events_query["variables"]["eventCategories"] = ["INTRUSION"]
         try:
             overview = await self.hass.async_add_executor_job(
                 self.verisure.request,
@@ -225,7 +231,10 @@ class VerisureDataUpdateCoordinator(DataUpdateCoordinator):
                 self.verisure.door_window(),
                 self.verisure.smart_lock(),
                 self.verisure.smartplugs(),
+                intrusion_events_query,
             )
+        except VerisureRateLimitError as err:
+            self._raise_rate_limited(err, "data update")
         except VerisureError as err:
             LOGGER.error("Could not read overview, %s", err)
             raise UpdateFailed("Could not read overview") from err
@@ -240,6 +249,8 @@ class VerisureDataUpdateCoordinator(DataUpdateCoordinator):
                 None,
             )
             return unpacked or []
+
+        intrusion_event_log = unpack(overview, "eventLog")
 
         # Store data in a way Home Assistant can easily consume it
         self._overview = overview
@@ -267,6 +278,11 @@ class VerisureDataUpdateCoordinator(DataUpdateCoordinator):
                 device["device"]["deviceLabel"]: device
                 for device in unpack(overview, "smartplugs")
             },
+            "intrusion_events": (
+                intrusion_event_log.get("pagedList", [])
+                if isinstance(intrusion_event_log, dict)
+                else []
+            ),
         }
 
     @Throttle(timedelta(seconds=60))

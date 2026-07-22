@@ -8,7 +8,7 @@ from typing import Any, override
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFlow
-from homeassistant.const import CONF_CODE, CONF_EMAIL, CONF_PASSWORD
+from homeassistant.const import CONF_CODE, CONF_EMAIL, CONF_PASSWORD, CONF_SCAN_INTERVAL
 from homeassistant.core import callback
 from homeassistant.helpers.storage import STORAGE_DIR
 
@@ -16,8 +16,11 @@ from .const import (
     CONF_GIID,
     CONF_LOCK_CODE_DIGITS,
     DEFAULT_LOCK_CODE_DIGITS,
+    DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     LOGGER,
+    MAX_SCAN_INTERVAL_SECONDS,
+    MIN_SCAN_INTERVAL_SECONDS,
 )
 from .coordinator import VerisureConfigEntry
 from .verisure_compat import (
@@ -337,6 +340,21 @@ class VerisureOptionsFlowHandler(OptionsFlow):
                             )
                         },
                     ): int,
+                    vol.Optional(
+                        CONF_SCAN_INTERVAL,
+                        description={
+                            "suggested_value": self.config_entry.options.get(
+                                CONF_SCAN_INTERVAL,
+                                int(DEFAULT_SCAN_INTERVAL.total_seconds()),
+                            )
+                        },
+                    ): vol.All(
+                        vol.Coerce(int),
+                        vol.Range(
+                            min=MIN_SCAN_INTERVAL_SECONDS,
+                            max=MAX_SCAN_INTERVAL_SECONDS,
+                        ),
+                    ),
                 }
             ),
             errors=errors,

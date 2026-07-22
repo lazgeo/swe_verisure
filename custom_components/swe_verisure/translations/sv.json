@@ -51,13 +51,22 @@
       "ethernet": {
         "name": "Ethernetstatus"
       }
+    },
+    "event": {
+      "intrusion": {
+        "name": "Inbrottslarm"
+      }
     }
   },
   "options": {
     "step": {
       "init": {
         "data": {
-          "lock_code_digits": "Antal siffror i låskoden"
+          "lock_code_digits": "Antal siffror i låskoden",
+          "scan_interval": "Avsökningsintervall (sekunder)"
+        },
+        "data_description": {
+          "scan_interval": "Hur ofta all Verisure-data, inklusive inbrottshändelser, hämtas. Tillåtet intervall: 10 till 3600 sekunder. Korta intervall ökar API-trafiken."
         }
       }
     }

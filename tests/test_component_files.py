@@ -24,7 +24,7 @@ class ComponentFilesTest(unittest.TestCase):
 
         self.assertEqual("swe_verisure", manifest["domain"])
         self.assertEqual("Swe Verisure", manifest["name"])
-        self.assertEqual("0.1.3", manifest["version"])
+        self.assertEqual("0.2.0", manifest["version"])
         self.assertEqual(["vsure==2.9.0"], manifest["requirements"])
         self.assertTrue(manifest["config_flow"])
 
@@ -102,6 +102,27 @@ class ComponentFilesTest(unittest.TestCase):
         for filename in ("config_flow.py", "coordinator.py"):
             source = (COMPONENT_DIR / filename).read_text("utf-8")
             self.assertNotIn("from verisure import", source)
+
+    def test_intrusion_polling_contract(self) -> None:
+        """Intrusions should share the coordinator poll and expose an event entity."""
+        coordinator = (COMPONENT_DIR / "coordinator.py").read_text("utf-8")
+        component = (COMPONENT_DIR / "__init__.py").read_text("utf-8")
+        event = (COMPONENT_DIR / "event.py").read_text("utf-8")
+
+        self.assertIn('eventCategories"] = ["INTRUSION"]', coordinator)
+        self.assertIn('"intrusion_events"', coordinator)
+        self.assertIn("Platform.EVENT", component)
+        self.assertIn("_trigger_event(EVENT_TYPE_INTRUSION", event)
+
+    def test_poll_interval_option_is_bounded(self) -> None:
+        """The polling interval should be configurable with finite bounds."""
+        config_flow = (COMPONENT_DIR / "config_flow.py").read_text("utf-8")
+        coordinator = (COMPONENT_DIR / "coordinator.py").read_text("utf-8")
+
+        self.assertIn("CONF_SCAN_INTERVAL", config_flow)
+        self.assertIn("MIN_SCAN_INTERVAL_SECONDS", config_flow)
+        self.assertIn("MAX_SCAN_INTERVAL_SECONDS", config_flow)
+        self.assertIn("CONF_SCAN_INTERVAL", coordinator)
 
 
 if __name__ == "__main__":

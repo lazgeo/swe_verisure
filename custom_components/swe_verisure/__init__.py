@@ -22,6 +22,7 @@ PLATFORMS = [
     Platform.ALARM_CONTROL_PANEL,
     Platform.BINARY_SENSOR,
     Platform.CAMERA,
+    Platform.EVENT,
     Platform.LOCK,
     Platform.SENSOR,
     Platform.SWITCH,
@@ -49,7 +50,7 @@ async def update_listener(
     hass: HomeAssistant, entry: SweVerisureConfigEntry
 ) -> None:
     """Handle options updates."""
-    entry.runtime_data.async_update_listeners()
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(
