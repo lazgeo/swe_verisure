@@ -5,13 +5,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, override
 
-from verisure import (
-    Error as VerisureError,
-    LoginError as VerisureLoginError,
-    RateLimitError as VerisureRateLimitError,
-    ResponseError as VerisureResponseError,
-    Session as Verisure,
-)
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFlow
@@ -27,6 +20,13 @@ from .const import (
     LOGGER,
 )
 from .coordinator import VerisureConfigEntry
+from .verisure_compat import (
+    Verisure,
+    VerisureError,
+    VerisureLoginError,
+    VerisureRateLimitError,
+    VerisureResponseError,
+)
 
 
 class VerisureConfigFlowHandler(ConfigFlow, domain=DOMAIN):

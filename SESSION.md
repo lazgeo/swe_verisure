@@ -19,6 +19,6 @@
 - Replaced the Spanish upstream fork contents with the standalone Swe Verisure
   HACS layout and GitHub-specific metadata. The cleanup preserves the fork's
   existing history and does not require a force-push.
-- Version 0.1.1 resolves optional `vsure` exception types dynamically because
+- Version 0.1.2 resolves optional `vsure` exception types dynamically because
   Home Assistant's built-in Verisure integration can preload its older library
   version; this prevents `Invalid handler specified` during config-flow import.

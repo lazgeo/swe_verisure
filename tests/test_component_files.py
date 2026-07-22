@@ -24,7 +24,7 @@ class ComponentFilesTest(unittest.TestCase):
 
         self.assertEqual("swe_verisure", manifest["domain"])
         self.assertEqual("Swe Verisure", manifest["name"])
-        self.assertEqual("0.1.1", manifest["version"])
+        self.assertEqual("0.1.2", manifest["version"])
         self.assertEqual(["vsure==2.9.0"], manifest["requirements"])
         self.assertTrue(manifest["config_flow"])
 
@@ -84,6 +84,10 @@ class ComponentFilesTest(unittest.TestCase):
         self.assertTrue(
             issubclass(namespace["VerisureAuthenticationError"], Exception)
         )
+
+        for filename in ("config_flow.py", "coordinator.py"):
+            source = (COMPONENT_DIR / filename).read_text("utf-8")
+            self.assertNotIn("from verisure import", source)
 
 
 if __name__ == "__main__":
