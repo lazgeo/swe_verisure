@@ -1,0 +1,60 @@
+"""Static contract tests for the Swe Verisure custom integration."""
+
+from __future__ import annotations
+
+import ast
+import json
+from pathlib import Path
+import unittest
+
+
+COMPONENT_DIR = Path(__file__).parents[1] / "custom_components" / "swe_verisure"
+
+
+class ComponentFilesTest(unittest.TestCase):
+    """Verify packaging and domain isolation without importing Home Assistant."""
+
+    def test_manifest_identifies_custom_integration(self) -> None:
+        """Manifest should expose the independent HACS domain and dependency."""
+        manifest = json.loads((COMPONENT_DIR / "manifest.json").read_text("utf-8"))
+
+        self.assertEqual("swe_verisure", manifest["domain"])
+        self.assertEqual("Swe Verisure", manifest["name"])
+        self.assertEqual("0.1.0", manifest["version"])
+        self.assertEqual(["vsure==2.9.0"], manifest["requirements"])
+        self.assertTrue(manifest["config_flow"])
+
+    def test_python_files_parse(self) -> None:
+        """Every shipped Python file should have valid syntax."""
+        for path in COMPONENT_DIR.rglob("*.py"):
+            with self.subTest(path=path.name):
+                ast.parse(path.read_text("utf-8"), filename=str(path))
+
+    def test_component_uses_runtime_data(self) -> None:
+        """New integration code should not store coordinators in hass.data."""
+        source = "\n".join(
+            path.read_text("utf-8")
+            for path in COMPONENT_DIR.glob("*.py")
+        )
+
+        self.assertNotIn("hass.data", source)
+        self.assertIn("entry.runtime_data = coordinator", source)
+
+    def test_service_targets_use_swe_domain(self) -> None:
+        """Entity services must target only Swe Verisure entities."""
+        services = (COMPONENT_DIR / "services.yaml").read_text("utf-8")
+
+        self.assertEqual(3, services.count("integration: swe_verisure"))
+        self.assertNotIn("integration: verisure", services)
+
+    def test_cookie_namespace_is_isolated(self) -> None:
+        """Session files must not collide with the built-in integration."""
+        coordinator = (COMPONENT_DIR / "coordinator.py").read_text("utf-8")
+        config_flow = (COMPONENT_DIR / "config_flow.py").read_text("utf-8")
+
+        self.assertIn('f"swe_verisure_{entry.data[CONF_EMAIL]}"', coordinator)
+        self.assertEqual(2, config_flow.count('f"swe_verisure_{user_input[CONF_EMAIL]}"'))
+
+
+if __name__ == "__main__":
+    unittest.main()

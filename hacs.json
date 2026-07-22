@@ -1,8 +1,5 @@
 {
-  "name": "My Verisure",
+  "name": "Swe Verisure",
   "render_readme": true,
-  "homeassistant": "2024.4.0",
-  "content_in_root": false,
-  "filename": "my_verisure",
-  "icon": "custom_components/my_verisure/brand/icon.png"
+  "homeassistant": "2026.4.0"
 }

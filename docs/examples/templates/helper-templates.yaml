@@ -1,9 +1,0 @@
-# Template binary — true if any internal zone armed (adjust entity IDs)
-template:
-  - binary_sensor:
-      - name: Verisure any internal zone
-        unique_id: verisure_any_internal
-        state: >
-          {{ is_state('binary_sensor.my_verisure_alarm_internal_day','on')
-             or is_state('binary_sensor.my_verisure_alarm_internal_night','on')
-             or is_state('binary_sensor.my_verisure_alarm_internal_total','on') }}

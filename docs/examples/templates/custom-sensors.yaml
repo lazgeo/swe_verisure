@@ -1,8 +1,0 @@
-# Template sensors — derived helpers (YAML mode)
-template:
-  - sensor:
-      - name: Verisure alarm summary short
-        unique_id: verisure_summary_short
-        state: >
-          {% set s = states('sensor.my_verisure_active_alarms') %}
-          {{ s | truncate(80, true) }}

@@ -1,8 +1,0 @@
-# Template sensor — derive binary helper from panel_state text
-# Adjust entity_id and state strings after inspecting Developer Tools.
-template:
-  - binary_sensor:
-      - name: Verisure fully armed away
-        unique_id: verisure_total_like_panel_state
-        state: >
-          {{ is_state('sensor.my_verisure_panel_state','armed_away') }}

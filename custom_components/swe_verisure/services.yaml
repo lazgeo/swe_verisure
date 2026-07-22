@@ -1,0 +1,17 @@
+capture_smartcam:
+  target:
+    entity:
+      integration: swe_verisure
+      domain: camera
+
+enable_autolock:
+  target:
+    entity:
+      integration: swe_verisure
+      domain: lock
+
+disable_autolock:
+  target:
+    entity:
+      integration: swe_verisure
+      domain: lock

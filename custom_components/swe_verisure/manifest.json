@@ -1,0 +1,13 @@
+{
+  "domain": "swe_verisure",
+  "name": "Swe Verisure",
+  "codeowners": ["@lazgeo"],
+  "config_flow": true,
+  "documentation": "https://github.com/lazgeo/swe_verisure",
+  "issue_tracker": "https://github.com/lazgeo/swe_verisure/issues",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "loggers": ["verisure"],
+  "requirements": ["vsure==2.9.0"],
+  "version": "0.1.0"
+}

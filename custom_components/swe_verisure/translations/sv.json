@@ -1,0 +1,79 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Kontot är redan konfigurerat.",
+      "no_installations": "Inga Verisure-installationer hittades för kontot.",
+      "reauth_successful": "Återautentiseringen lyckades."
+    },
+    "error": {
+      "invalid_auth": "Ogiltig autentisering.",
+      "mfa_rate_limited": "Verisure har tillfälligt begränsat autentiseringen. Försök igen senare.",
+      "unknown": "Ett oväntat fel inträffade.",
+      "unknown_mfa": "Ett okänt fel inträffade när tvåstegsverifieringen konfigurerades."
+    },
+    "step": {
+      "installation": {
+        "data": {
+          "giid": "Installation"
+        },
+        "description": "Flera Verisure-installationer hittades. Välj den som ska läggas till i Home Assistant."
+      },
+      "mfa": {
+        "data": {
+          "code": "Verifieringskod",
+          "description": "Ange den sexsiffriga verifieringskod som Verisure skickade."
+        }
+      },
+      "reauth_confirm": {
+        "data": {
+          "description": "Autentisera Verisure-kontot igen.",
+          "email": "E-postadress",
+          "password": "Lösenord"
+        }
+      },
+      "reauth_mfa": {
+        "data": {
+          "code": "Verifieringskod",
+          "description": "Ange den sexsiffriga verifieringskod som Verisure skickade."
+        }
+      },
+      "user": {
+        "data": {
+          "description": "Logga in med e-postadress och lösenord för Verisure. DNI/NIE behövs inte.",
+          "email": "E-postadress",
+          "password": "Lösenord"
+        }
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "ethernet": {
+        "name": "Ethernetstatus"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "lock_code_digits": "Antal siffror i låskoden"
+        }
+      }
+    }
+  },
+  "services": {
+    "capture_smartcam": {
+      "description": "Tar en ny bild med en Verisure SmartCam.",
+      "name": "Ta SmartCam-bild"
+    },
+    "disable_autolock": {
+      "description": "Inaktiverar automatisk låsning för ett Verisure Lockguard-lås.",
+      "name": "Inaktivera automatisk låsning"
+    },
+    "enable_autolock": {
+      "description": "Aktiverar automatisk låsning för ett Verisure Lockguard-lås.",
+      "name": "Aktivera automatisk låsning"
+    }
+  }
+}

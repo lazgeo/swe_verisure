@@ -1,0 +1,6 @@
+Swe Verisure includes code derived from the Home Assistant Verisure integration:
+https://github.com/home-assistant/core/tree/2026.4.1/homeassistant/components/verisure
+Copyright Home Assistant contributors, licensed under Apache License 2.0.
+
+It uses python-verisure (vsure), licensed under the MIT License:
+https://github.com/persandstrom/python-verisure

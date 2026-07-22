@@ -1,9 +1,0 @@
-# Lovelace — compact status card (adjust entity IDs)
-type: entities
-title: Verisure
-entities:
-  - entity: alarm_control_panel.my_verisure
-  - entity: sensor.my_verisure_active_alarms
-  - entity: sensor.my_verisure_panel_state
-  - entity: binary_sensor.my_verisure_alarm_internal_total
-  - entity: binary_sensor.my_verisure_alarm_external

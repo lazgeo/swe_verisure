@@ -1,9 +1,0 @@
-alias: Verisure night arm with refresh
-sequence:
-  - service: my_verisure.get_status
-    data:
-      installation_id: INSTALLATION_ID
-  - service: my_verisure.arm_night
-    data:
-      installation_id: INSTALLATION_ID
-mode: single

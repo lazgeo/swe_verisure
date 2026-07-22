@@ -1,3 +1,0 @@
-# Native alarm panel card — replace entity_id with yours
-type: alarm-panel
-entity: alarm_control_panel.my_verisure

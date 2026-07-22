@@ -1,7 +1,0 @@
-# Script — refresh Verisure status on demand
-alias: Verisure refresh status
-sequence:
-  - service: my_verisure.get_status
-    data:
-      installation_id: INSTALLATION_ID
-mode: single
