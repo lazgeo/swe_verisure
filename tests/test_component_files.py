@@ -5,7 +5,11 @@ from __future__ import annotations
 import ast
 import json
 from pathlib import Path
+import runpy
+import sys
+from types import ModuleType
 import unittest
+from unittest.mock import patch
 
 
 COMPONENT_DIR = Path(__file__).parents[1] / "custom_components" / "swe_verisure"
@@ -20,7 +24,7 @@ class ComponentFilesTest(unittest.TestCase):
 
         self.assertEqual("swe_verisure", manifest["domain"])
         self.assertEqual("Swe Verisure", manifest["name"])
-        self.assertEqual("0.1.0", manifest["version"])
+        self.assertEqual("0.1.1", manifest["version"])
         self.assertEqual(["vsure==2.9.0"], manifest["requirements"])
         self.assertTrue(manifest["config_flow"])
 
@@ -54,6 +58,32 @@ class ComponentFilesTest(unittest.TestCase):
 
         self.assertIn('f"swe_verisure_{entry.data[CONF_EMAIL]}"', coordinator)
         self.assertEqual(2, config_flow.count('f"swe_verisure_{user_input[CONF_EMAIL]}"'))
+
+    def test_compatibility_with_preloaded_older_verisure(self) -> None:
+        """Optional exception imports must not break config-flow loading."""
+        old_verisure = ModuleType("verisure")
+
+        class Error(Exception):
+            pass
+
+        class LoginError(Error):
+            pass
+
+        class ResponseError(Error):
+            pass
+
+        old_verisure.Error = Error
+        old_verisure.LoginError = LoginError
+        old_verisure.ResponseError = ResponseError
+        old_verisure.Session = object
+
+        with patch.dict(sys.modules, {"verisure": old_verisure}):
+            namespace = runpy.run_path(COMPONENT_DIR / "verisure_compat.py")
+
+        self.assertIs(namespace["VerisureLoginError"], LoginError)
+        self.assertTrue(
+            issubclass(namespace["VerisureAuthenticationError"], Exception)
+        )
 
 
 if __name__ == "__main__":

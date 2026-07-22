@@ -4,17 +4,6 @@ from datetime import datetime, timedelta
 from time import sleep
 from typing import override
 
-from verisure import (
-    AuthenticationError as VerisureAuthenticationError,
-    CookieReadError as VerisureCookieReadError,
-    Error as VerisureError,
-    LoginError as VerisureLoginError,
-    RateLimitError as VerisureRateLimitError,
-    RequestError as VerisureRequestError,
-    ResponseError as VerisureResponseError,
-    Session as Verisure,
-)
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
@@ -30,6 +19,16 @@ from .const import (
     DOMAIN,
     LOGGER,
     RATE_LIMIT_BACKOFF,
+)
+from .verisure_compat import (
+    Verisure,
+    VerisureAuthenticationError,
+    VerisureCookieReadError,
+    VerisureError,
+    VerisureLoginError,
+    VerisureRateLimitError,
+    VerisureRequestError,
+    VerisureResponseError,
 )
 
 type VerisureConfigEntry = ConfigEntry[VerisureDataUpdateCoordinator]
